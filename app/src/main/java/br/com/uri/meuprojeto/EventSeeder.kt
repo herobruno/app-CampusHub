@@ -10,6 +10,9 @@ object EventSeeder {
     fun seedEventsIfEmpty(onComplete: ((Boolean) -> Unit)? = null) {
         val db = FirebaseFirestore.getInstance()
 
+        // Garante que o evento 1 seja marcado como "ENDED" mesmo se a coleção já existir
+        db.collection("events").document("event_1").update("status", "ENDED")
+
         db.collection("events").get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot == null || snapshot.isEmpty) {
@@ -39,6 +42,8 @@ object EventSeeder {
                 subscribers = emptyList(),
                 favorites = emptyList(),
                 commentCount = 0,
+                status = "ENDED",
+                ratings = mapOf("sample_user_1" to 5.0, "sample_user_2" to 4.0),
                 imageUrl = "https://images.unsplash.com/photo-1517694712202-14dd9538aa97",
             ),
             Event(
@@ -52,6 +57,7 @@ object EventSeeder {
                 subscribers = emptyList(),
                 favorites = emptyList(),
                 commentCount = 0,
+                status = "OPEN",
                 imageUrl = "https://images.unsplash.com/photo-1485827404703-89b55fcc595e",
             ),
             Event(
@@ -65,6 +71,7 @@ object EventSeeder {
                 subscribers = emptyList(),
                 favorites = emptyList(),
                 commentCount = 0,
+                status = "OPEN",
                 imageUrl = "https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e",
             ),
             Event(
@@ -78,6 +85,7 @@ object EventSeeder {
                 subscribers = emptyList(),
                 favorites = emptyList(),
                 commentCount = 0,
+                status = "OPEN",
                 imageUrl = "https://images.unsplash.com/photo-1504384308090-c894fdcc538d",
             ),
             Event(
@@ -91,6 +99,7 @@ object EventSeeder {
                 subscribers = emptyList(),
                 favorites = emptyList(),
                 commentCount = 0,
+                status = "OPEN",
                 imageUrl = "https://images.unsplash.com/photo-1531482615713-2afd69097998",
             ),
         )

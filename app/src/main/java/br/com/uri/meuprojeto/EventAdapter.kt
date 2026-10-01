@@ -1,5 +1,6 @@
 package br.com.uri.meuprojeto
 
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -9,6 +10,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import java.util.Locale
 
 class EventAdapter(
     private var events: List<Event>,
@@ -16,6 +18,7 @@ class EventAdapter(
     private val onSubscribeClick: (Event) -> Unit,
     private val onFavoriteClick: ((Event) -> Unit)? = null,
     private val onCommentsClick: ((Event) -> Unit)? = null,
+    private val onRateClick: ((Event) -> Unit)? = null,
 ) : RecyclerView.Adapter<EventAdapter.EventViewHolder>() {
 
     fun updateEvents(newEvents: List<Event>) {
@@ -30,7 +33,7 @@ class EventAdapter(
 
     override fun onBindViewHolder(holder: EventViewHolder, position: Int) {
         val event = events[position]
-        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick, onCommentsClick)
+        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick, onCommentsClick, onRateClick)
     }
 
     override fun getItemCount(): Int = events.size
@@ -42,6 +45,7 @@ class EventAdapter(
         private val tvCommentCount: TextView = itemView.findViewById(R.id.tvCommentCount)
         private val layoutComments: View = itemView.findViewById(R.id.layoutComments)
         private val tvEventCategory: TextView = itemView.findViewById(R.id.tvEventCategory)
+        private val tvEventStatus: TextView = itemView.findViewById(R.id.tvEventStatus)
         private val tvEventTitle: TextView = itemView.findViewById(R.id.tvEventTitle)
         private val tvEventDate: TextView = itemView.findViewById(R.id.tvEventDate)
         private val tvEventLocation: TextView = itemView.findViewById(R.id.tvEventLocation)
@@ -49,12 +53,16 @@ class EventAdapter(
         private val tvEventCapacity: TextView = itemView.findViewById(R.id.tvEventCapacity)
         private val btnSubscribe: Button = itemView.findViewById(R.id.btnSubscribe)
 
+        private val tvRatingAverage: TextView = itemView.findViewById(R.id.tvRatingAverage)
+        private val btnRateEvent: Button = itemView.findViewById(R.id.btnRateEvent)
+
         fun bind(
             event: Event,
             currentUserId: String,
             onSubscribeClick: (Event) -> Unit,
             onFavoriteClick: ((Event) -> Unit)?,
             onCommentsClick: ((Event) -> Unit)?,
+            onRateClick: ((Event) -> Unit)?,
         ) {
             tvEventCategory.text = event.category
             tvEventTitle.text = event.title
@@ -75,6 +83,42 @@ class EventAdapter(
                 btnSubscribe.text = "Inscrever-se"
             }
 
+            // Exibição do Status, Média e Botão de Avaliação (no lugar do botão de inscrição)
+            if (event.isEnded) {
+                tvEventStatus.text = "Encerrado"
+                tvEventStatus.setBackgroundColor(Color.parseColor("#FFD32F2F"))
+
+                val labelReviews = if (event.ratingCount == 1) "avaliação" else "avaliações"
+                tvRatingAverage.text = String.format(Locale.getDefault(), "★ %.1f (%d %s)", event.averageRating, event.ratingCount, labelReviews)
+                tvRatingAverage.visibility = View.VISIBLE
+
+                // Esconde botão de inscrição e exibe botão de avaliação no mesmo lugar (se o aluno estava inscrito)
+                btnSubscribe.visibility = View.GONE
+
+                if (isSubscribed) {
+                    btnRateEvent.visibility = View.VISIBLE
+                    val userRating = event.ratings[currentUserId]
+                    if (userRating != null) {
+                        btnRateEvent.text = String.format(Locale.getDefault(), "Sua Nota: %.1f ★", userRating)
+                    } else {
+                        btnRateEvent.text = "Avaliar Evento"
+                    }
+
+                    btnRateEvent.setOnClickListener {
+                        onRateClick?.invoke(event)
+                    }
+                } else {
+                    btnRateEvent.visibility = View.GONE
+                }
+            } else {
+                tvEventStatus.text = "Aberto"
+                tvEventStatus.setBackgroundColor(Color.parseColor("#FF388E3C"))
+                tvRatingAverage.visibility = View.GONE
+                btnRateEvent.visibility = View.GONE
+                btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.isEnabled = true
+            }
+
             val isFavorite = event.favorites.contains(currentUserId)
             if (isFavorite) {
                 btnFavorite.setImageResource(R.drawable.ic_heart_filled)
@@ -93,7 +137,9 @@ class EventAdapter(
             }
 
             btnSubscribe.setOnClickListener {
-                onSubscribeClick(event)
+                if (!event.isEnded) {
+                    onSubscribeClick(event)
+                }
             }
 
             btnFavorite.setOnClickListener {

@@ -2,12 +2,16 @@ package br.com.uri.meuprojeto
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
+import android.widget.RatingBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -61,6 +65,7 @@ class HomeActivity : AppCompatActivity() {
             onSubscribeClick = { event -> toggleSubscription(event) },
             onFavoriteClick = { event -> toggleFavorite(event) },
             onCommentsClick = { event -> openCommentsBottomSheet(event.id) },
+            onRateClick = { event -> showRatingDialog(event) },
         )
         rvEvents.adapter = adapter
 
@@ -98,6 +103,61 @@ class HomeActivity : AppCompatActivity() {
     private fun openCommentsBottomSheet(eventId: String) {
         val fragment = CommentsBottomSheetFragment.newInstance(eventId)
         fragment.show(supportFragmentManager, "CommentsBottomSheetFragment")
+    }
+
+    private fun showRatingDialog(event: Event) {
+        val userId = auth.currentUser?.uid ?: return
+
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Avaliar Evento")
+        builder.setMessage("Atribua uma nota de 1 a 5 estrelas para '${event.title}':")
+
+        val ratingBar = RatingBar(this).apply {
+            numStars = 5
+            stepSize = 1.0f
+            val previousRating = event.ratings[userId] ?: 5.0
+            rating = previousRating.toFloat()
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(0, 32, 0, 16)
+            addView(ratingBar)
+        }
+
+        builder.setView(container)
+
+        builder.setPositiveButton("Salvar Avaliação") { dialog, _ ->
+            val score = ratingBar.rating.toDouble()
+            if (score <= 0.0) {
+                Toast.makeText(this, "Selecione pelo menos 1 estrela", Toast.LENGTH_SHORT).show()
+                return@setPositiveButton
+            }
+
+            db.collection("events")
+                .document(event.id)
+                .update("ratings.$userId", score)
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Avaliação salva com sucesso!", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Erro ao salvar avaliação: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            dialog.dismiss()
+        }
+
+        builder.setNegativeButton("Cancelar") { dialog, _ ->
+            dialog.dismiss()
+        }
+
+        builder.show()
     }
 
     private fun loadEventsRealtime() {
