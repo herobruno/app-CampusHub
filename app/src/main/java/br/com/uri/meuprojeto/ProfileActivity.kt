@@ -72,6 +72,7 @@ class ProfileActivity : AppCompatActivity() {
             currentUserId = user.uid,
             onSubscribeClick = { event -> toggleSubscription(event) },
             onFavoriteClick = { event -> toggleFavorite(event) },
+            onCommentsClick = { event -> openCommentsBottomSheet(event.id) },
         )
         rvMyEvents.adapter = eventAdapter
 
@@ -162,6 +163,11 @@ class ProfileActivity : AppCompatActivity() {
 
         // Carrega inicialmente os eventos inscritos
         loadEventsByField("subscribers", user.uid, "Você ainda não está inscrito em nenhum evento.")
+    }
+
+    private fun openCommentsBottomSheet(eventId: String) {
+        val fragment = CommentsBottomSheetFragment.newInstance(eventId)
+        fragment.show(supportFragmentManager, "CommentsBottomSheetFragment")
     }
 
     private fun updateHeaderInfo(name: String) {

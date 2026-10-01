@@ -15,6 +15,7 @@ class EventAdapter(
     private val currentUserId: String,
     private val onSubscribeClick: (Event) -> Unit,
     private val onFavoriteClick: ((Event) -> Unit)? = null,
+    private val onCommentsClick: ((Event) -> Unit)? = null,
 ) : RecyclerView.Adapter<EventAdapter.EventViewHolder>() {
 
     fun updateEvents(newEvents: List<Event>) {
@@ -29,7 +30,7 @@ class EventAdapter(
 
     override fun onBindViewHolder(holder: EventViewHolder, position: Int) {
         val event = events[position]
-        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick)
+        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick, onCommentsClick)
     }
 
     override fun getItemCount(): Int = events.size
@@ -37,6 +38,9 @@ class EventAdapter(
     class EventViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val ivEventImage: ImageView = itemView.findViewById(R.id.ivEventImage)
         private val btnFavorite: ImageButton = itemView.findViewById(R.id.btnFavorite)
+        private val btnComments: ImageButton = itemView.findViewById(R.id.btnComments)
+        private val tvCommentCount: TextView = itemView.findViewById(R.id.tvCommentCount)
+        private val layoutComments: View = itemView.findViewById(R.id.layoutComments)
         private val tvEventCategory: TextView = itemView.findViewById(R.id.tvEventCategory)
         private val tvEventTitle: TextView = itemView.findViewById(R.id.tvEventTitle)
         private val tvEventDate: TextView = itemView.findViewById(R.id.tvEventDate)
@@ -50,6 +54,7 @@ class EventAdapter(
             currentUserId: String,
             onSubscribeClick: (Event) -> Unit,
             onFavoriteClick: ((Event) -> Unit)?,
+            onCommentsClick: ((Event) -> Unit)?,
         ) {
             tvEventCategory.text = event.category
             tvEventTitle.text = event.title
@@ -59,6 +64,9 @@ class EventAdapter(
 
             val subscriberCount = event.subscribers.size
             tvEventCapacity.text = "$subscriberCount / ${event.maxParticipants} inscritos"
+
+            val count = event.commentCount
+            tvCommentCount.text = if (count == 1) "1 comentário" else "$count comentários"
 
             val isSubscribed = event.subscribers.contains(currentUserId)
             if (isSubscribed) {
@@ -91,6 +99,12 @@ class EventAdapter(
             btnFavorite.setOnClickListener {
                 onFavoriteClick?.invoke(event)
             }
+
+            val clickCommentsListener = View.OnClickListener {
+                onCommentsClick?.invoke(event)
+            }
+            btnComments.setOnClickListener(clickCommentsListener)
+            layoutComments.setOnClickListener(clickCommentsListener)
         }
     }
 }

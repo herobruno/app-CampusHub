@@ -9,7 +9,21 @@ object EventSeeder {
 
     fun seedEventsIfEmpty(onComplete: ((Boolean) -> Unit)? = null) {
         val db = FirebaseFirestore.getInstance()
-        createSampleEvents(db, onComplete)
+
+        db.collection("events").get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot == null || snapshot.isEmpty) {
+                    Log.d(TAG, "Coleção 'events' vazia. Criando eventos iniciais...")
+                    createSampleEvents(db, onComplete)
+                } else {
+                    Log.d(TAG, "Coleção 'events' já possui ${snapshot.size()} documentos. Mantendo dados do banco.")
+                    onComplete?.invoke(false)
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Erro ao verificar coleção 'events': ${e.message}", e)
+                onComplete?.invoke(false)
+            }
     }
 
     private fun createSampleEvents(db: FirebaseFirestore, onComplete: ((Boolean) -> Unit)?) {
@@ -23,6 +37,8 @@ object EventSeeder {
                 category = "Tecnologia",
                 maxParticipants = 50,
                 subscribers = emptyList(),
+                favorites = emptyList(),
+                commentCount = 0,
                 imageUrl = "https://images.unsplash.com/photo-1517694712202-14dd9538aa97",
             ),
             Event(
@@ -34,6 +50,8 @@ object EventSeeder {
                 category = "Inteligência Artificial",
                 maxParticipants = 40,
                 subscribers = emptyList(),
+                favorites = emptyList(),
+                commentCount = 0,
                 imageUrl = "https://images.unsplash.com/photo-1485827404703-89b55fcc595e",
             ),
             Event(
@@ -45,6 +63,8 @@ object EventSeeder {
                 category = "Design",
                 maxParticipants = 30,
                 subscribers = emptyList(),
+                favorites = emptyList(),
+                commentCount = 0,
                 imageUrl = "https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e",
             ),
             Event(
@@ -56,6 +76,8 @@ object EventSeeder {
                 category = "Hackathon",
                 maxParticipants = 100,
                 subscribers = emptyList(),
+                favorites = emptyList(),
+                commentCount = 0,
                 imageUrl = "https://images.unsplash.com/photo-1504384308090-c894fdcc538d",
             ),
             Event(
@@ -67,6 +89,8 @@ object EventSeeder {
                 category = "Backend & Cloud",
                 maxParticipants = 60,
                 subscribers = emptyList(),
+                favorites = emptyList(),
+                commentCount = 0,
                 imageUrl = "https://images.unsplash.com/photo-1531482615713-2afd69097998",
             ),
         )
@@ -78,14 +102,14 @@ object EventSeeder {
             db.collection("events").document(event.id).set(event)
                 .addOnSuccessListener {
                     insertedCount++
-                    Log.d(TAG, "Evento '${event.title}' sincronizado com sucesso (${insertedCount}/${sampleEvents.size}).")
+                    Log.d(TAG, "Evento '${event.title}' criado com sucesso (${insertedCount}/${sampleEvents.size}).")
                     if (insertedCount == sampleEvents.size) {
                         onComplete?.invoke(true)
                     }
                 }
                 .addOnFailureListener { e ->
                     hasError = true
-                    Log.e(TAG, "Erro ao sincronizar evento '${event.title}': ${e.message}", e)
+                    Log.e(TAG, "Erro ao criar evento '${event.title}': ${e.message}", e)
                     if (!hasError) {
                         onComplete?.invoke(false)
                     }

@@ -60,6 +60,7 @@ class HomeActivity : AppCompatActivity() {
             currentUserId = currentUser.uid,
             onSubscribeClick = { event -> toggleSubscription(event) },
             onFavoriteClick = { event -> toggleFavorite(event) },
+            onCommentsClick = { event -> openCommentsBottomSheet(event.id) },
         )
         rvEvents.adapter = adapter
 
@@ -92,6 +93,11 @@ class HomeActivity : AppCompatActivity() {
 
         // Carrega eventos em tempo real do Firestore
         loadEventsRealtime()
+    }
+
+    private fun openCommentsBottomSheet(eventId: String) {
+        val fragment = CommentsBottomSheetFragment.newInstance(eventId)
+        fragment.show(supportFragmentManager, "CommentsBottomSheetFragment")
     }
 
     private fun loadEventsRealtime() {
