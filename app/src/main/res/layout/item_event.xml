@@ -13,13 +13,32 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <ImageView
-            android:id="@+id/ivEventImage"
+        <!-- Image Container with Favorite Heart Button -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="160dp"
-            android:contentDescription="Imagem do Evento"
-            android:scaleType="centerCrop"
-            android:src="@drawable/ic_launcher_background" />
+            android:layout_height="160dp">
+
+            <ImageView
+                android:id="@+id/ivEventImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Imagem do Evento"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_launcher_background" />
+
+            <ImageButton
+                android:id="@+id/btnFavorite"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="end|top"
+                android:layout_margin="8dp"
+                android:background="@drawable/ic_launcher_background"
+                android:backgroundTint="#80000000"
+                android:contentDescription="Favoritar"
+                android:padding="8dp"
+                app:srcCompat="@drawable/ic_heart_outline" />
+
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -99,8 +118,8 @@
                     android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:text="Inscrever-se"
-                    app:cornerRadius="8dp"
-                    app:backgroundTint="@color/primary_blue" />
+                    app:backgroundTint="@color/primary_blue"
+                    app:cornerRadius="8dp" />
 
             </RelativeLayout>
 

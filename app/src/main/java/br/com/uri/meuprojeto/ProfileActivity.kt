@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
@@ -24,6 +25,7 @@ class ProfileActivity : AppCompatActivity() {
 
     private lateinit var rvMyEvents: RecyclerView
     private lateinit var tvNoMyEvents: TextView
+    private lateinit var tabLayoutProfile: TabLayout
     private lateinit var eventAdapter: EventAdapter
     private var myEventsListener: ListenerRegistration? = null
 
@@ -56,6 +58,7 @@ class ProfileActivity : AppCompatActivity() {
         tvProfileHeaderEmail = findViewById(R.id.tvProfileHeaderEmail)
         tvUserInitial = findViewById(R.id.tvUserInitial)
         cardEditProfile = findViewById(R.id.cardEditProfile)
+        tabLayoutProfile = findViewById(R.id.tabLayoutProfile)
         rvMyEvents = findViewById(R.id.rvMyEvents)
         tvNoMyEvents = findViewById(R.id.tvNoMyEvents)
 
@@ -68,6 +71,7 @@ class ProfileActivity : AppCompatActivity() {
             events = emptyList(),
             currentUserId = user.uid,
             onSubscribeClick = { event -> toggleSubscription(event) },
+            onFavoriteClick = { event -> toggleFavorite(event) },
         )
         rvMyEvents.adapter = eventAdapter
 
@@ -143,8 +147,21 @@ class ProfileActivity : AppCompatActivity() {
                 }
         }
 
-        // Carrega eventos inscritos em tempo real
-        loadMySubscribedEvents(user.uid)
+        // Configuração das Abas (Inscrições vs Favoritos)
+        tabLayoutProfile.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                when (tab?.position) {
+                    0 -> loadEventsByField("subscribers", user.uid, "Você ainda não está inscrito em nenhum evento.")
+                    1 -> loadEventsByField("favorites", user.uid, "Você ainda não possui eventos favoritados.")
+                }
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab?) {}
+            override fun onTabReselected(tab: TabLayout.Tab?) {}
+        })
+
+        // Carrega inicialmente os eventos inscritos
+        loadEventsByField("subscribers", user.uid, "Você ainda não está inscrito em nenhum evento.")
     }
 
     private fun updateHeaderInfo(name: String) {
@@ -154,9 +171,11 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadMySubscribedEvents(userId: String) {
+    private fun loadEventsByField(fieldName: String, userId: String, emptyMessage: String) {
+        myEventsListener?.remove()
+
         myEventsListener = db.collection("events")
-            .whereArrayContains("subscribers", userId)
+            .whereArrayContains(fieldName, userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Toast.makeText(this, "Erro ao carregar seus eventos: ${error.message}", Toast.LENGTH_LONG).show()
@@ -169,6 +188,7 @@ class ProfileActivity : AppCompatActivity() {
                     }
 
                     if (myEvents.isEmpty()) {
+                        tvNoMyEvents.text = emptyMessage
                         tvNoMyEvents.visibility = View.VISIBLE
                         rvMyEvents.visibility = View.GONE
                     } else {
@@ -203,6 +223,31 @@ class ProfileActivity : AppCompatActivity() {
                 }
                 .addOnFailureListener { e ->
                     Toast.makeText(this, "Erro ao realizar inscrição: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+        }
+    }
+
+    private fun toggleFavorite(event: Event) {
+        val userId = auth.currentUser?.uid ?: return
+        val eventRef = db.collection("events").document(event.id)
+
+        val isFavorite = event.favorites.contains(userId)
+
+        if (isFavorite) {
+            eventRef.update("favorites", FieldValue.arrayRemove(userId))
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Removido dos favoritos", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Erro ao desfavoritar: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+        } else {
+            eventRef.update("favorites", FieldValue.arrayUnion(userId))
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Adicionado aos favoritos!", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Erro ao favoritar: ${e.message}", Toast.LENGTH_LONG).show()
                 }
         }
     }

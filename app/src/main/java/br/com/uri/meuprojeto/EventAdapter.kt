@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -12,7 +13,8 @@ import com.bumptech.glide.Glide
 class EventAdapter(
     private var events: List<Event>,
     private val currentUserId: String,
-    private val onSubscribeClick: (Event) -> Unit
+    private val onSubscribeClick: (Event) -> Unit,
+    private val onFavoriteClick: ((Event) -> Unit)? = null,
 ) : RecyclerView.Adapter<EventAdapter.EventViewHolder>() {
 
     fun updateEvents(newEvents: List<Event>) {
@@ -27,13 +29,14 @@ class EventAdapter(
 
     override fun onBindViewHolder(holder: EventViewHolder, position: Int) {
         val event = events[position]
-        holder.bind(event, currentUserId, onSubscribeClick)
+        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick)
     }
 
     override fun getItemCount(): Int = events.size
 
     class EventViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val ivEventImage: ImageView = itemView.findViewById(R.id.ivEventImage)
+        private val btnFavorite: ImageButton = itemView.findViewById(R.id.btnFavorite)
         private val tvEventCategory: TextView = itemView.findViewById(R.id.tvEventCategory)
         private val tvEventTitle: TextView = itemView.findViewById(R.id.tvEventTitle)
         private val tvEventDate: TextView = itemView.findViewById(R.id.tvEventDate)
@@ -45,7 +48,8 @@ class EventAdapter(
         fun bind(
             event: Event,
             currentUserId: String,
-            onSubscribeClick: (Event) -> Unit
+            onSubscribeClick: (Event) -> Unit,
+            onFavoriteClick: ((Event) -> Unit)?,
         ) {
             tvEventCategory.text = event.category
             tvEventTitle.text = event.title
@@ -63,6 +67,13 @@ class EventAdapter(
                 btnSubscribe.text = "Inscrever-se"
             }
 
+            val isFavorite = event.favorites.contains(currentUserId)
+            if (isFavorite) {
+                btnFavorite.setImageResource(R.drawable.ic_heart_filled)
+            } else {
+                btnFavorite.setImageResource(R.drawable.ic_heart_outline)
+            }
+
             if (event.imageUrl.isNotEmpty()) {
                 Glide.with(itemView.context)
                     .load(event.imageUrl)
@@ -75,6 +86,10 @@ class EventAdapter(
 
             btnSubscribe.setOnClickListener {
                 onSubscribeClick(event)
+            }
+
+            btnFavorite.setOnClickListener {
+                onFavoriteClick?.invoke(event)
             }
         }
     }

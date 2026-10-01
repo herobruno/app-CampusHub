@@ -9,6 +9,7 @@ data class Event(
     val category: String = "",
     val maxParticipants: Int = 0,
     val subscribers: List<String> = emptyList(),
+    val favorites: List<String> = emptyList(),
     val imageUrl: String = "",
     val createdAt: Long = System.currentTimeMillis(),
 )

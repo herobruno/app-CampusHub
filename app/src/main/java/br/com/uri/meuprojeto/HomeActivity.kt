@@ -59,6 +59,7 @@ class HomeActivity : AppCompatActivity() {
             events = emptyList(),
             currentUserId = currentUser.uid,
             onSubscribeClick = { event -> toggleSubscription(event) },
+            onFavoriteClick = { event -> toggleFavorite(event) },
         )
         rvEvents.adapter = adapter
 
@@ -151,6 +152,31 @@ class HomeActivity : AppCompatActivity() {
                 }
                 .addOnFailureListener { e ->
                     Toast.makeText(this, "Erro ao realizar inscrição: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+        }
+    }
+
+    private fun toggleFavorite(event: Event) {
+        val userId = auth.currentUser?.uid ?: return
+        val eventRef = db.collection("events").document(event.id)
+
+        val isFavorite = event.favorites.contains(userId)
+
+        if (isFavorite) {
+            eventRef.update("favorites", FieldValue.arrayRemove(userId))
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Removido dos favoritos", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Erro ao desfavoritar: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+        } else {
+            eventRef.update("favorites", FieldValue.arrayUnion(userId))
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Adicionado aos favoritos!", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Erro ao favoritar: ${e.message}", Toast.LENGTH_LONG).show()
                 }
         }
     }
