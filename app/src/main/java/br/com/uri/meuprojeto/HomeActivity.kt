@@ -2,13 +2,19 @@ package br.com.uri.meuprojeto
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.RatingBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -30,8 +36,17 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var tvEmpty: TextView
 
+    private lateinit var etSearchQuery: EditText
+    private lateinit var spinnerCategory: Spinner
+    private lateinit var spinnerStatus: Spinner
+
     private lateinit var adapter: EventAdapter
     private var eventsListener: ListenerRegistration? = null
+
+    private var allEvents: List<Event> = emptyList()
+    private val categoryList = mutableListOf("Todas", "Tecnologia", "Inteligência Artificial", "Design", "Hackathon", "Backend & Cloud")
+    private lateinit var categoryAdapter: ArrayAdapter<String>
+    private lateinit var statusAdapter: ArrayAdapter<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +68,10 @@ class HomeActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         tvEmpty = findViewById(R.id.tvEmpty)
 
+        etSearchQuery = findViewById(R.id.etSearchQuery)
+        spinnerCategory = findViewById(R.id.spinnerCategory)
+        spinnerStatus = findViewById(R.id.spinnerStatus)
+
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
         val btnProfile = findViewById<ImageButton>(R.id.btnProfile)
         val btnLogout = findViewById<ImageButton>(R.id.btnLogout)
@@ -68,6 +87,9 @@ class HomeActivity : AppCompatActivity() {
             onRateClick = { event -> showRatingDialog(event) },
         )
         rvEvents.adapter = adapter
+
+        // Configuração dos Filtros (Search & Spinners)
+        setupFilters()
 
         // Popula automaticamente a coleção 'events' no Firestore caso esteja vazia
         EventSeeder.seedEventsIfEmpty()
@@ -98,6 +120,97 @@ class HomeActivity : AppCompatActivity() {
 
         // Carrega eventos em tempo real do Firestore
         loadEventsRealtime()
+    }
+
+    private fun setupFilters() {
+        categoryAdapter = ArrayAdapter(
+            this,
+            R.layout.item_spinner_selected,
+            categoryList
+        ).apply {
+            setDropDownViewResource(R.layout.item_spinner_dropdown)
+        }
+        spinnerCategory.adapter = categoryAdapter
+
+        val statusList = listOf("Todos", "Abertos", "Encerrados")
+        statusAdapter = ArrayAdapter(
+            this,
+            R.layout.item_spinner_selected,
+            statusList
+        ).apply {
+            setDropDownViewResource(R.layout.item_spinner_dropdown)
+        }
+        spinnerStatus.adapter = statusAdapter
+
+        etSearchQuery.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterEvents()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        val spinnerListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                filterEvents()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        spinnerCategory.onItemSelectedListener = spinnerListener
+        spinnerStatus.onItemSelectedListener = spinnerListener
+    }
+
+    private fun filterEvents() {
+        val query = etSearchQuery.text.toString().trim()
+        val selectedCategory = spinnerCategory.selectedItem?.toString() ?: "Todas"
+        val selectedStatus = spinnerStatus.selectedItem?.toString() ?: "Todos"
+
+        val filteredList = allEvents.filter { event ->
+            // 1. Pesquisa textual no título (case-insensitive)
+            val matchesTitle = query.isEmpty() || event.title.contains(query, ignoreCase = true)
+
+            // 2. Categoria
+            val matchesCategory = selectedCategory == "Todas" || event.category.equals(selectedCategory, ignoreCase = true)
+
+            // 3. Situação / Status ("Todos", "Abertos", "Encerrados")
+            val matchesStatus = when (selectedStatus) {
+                "Abertos" -> !event.isEnded && event.status != "ENDED"
+                "Encerrados" -> event.isEnded || event.status == "ENDED"
+                else -> true
+            }
+
+            matchesTitle && matchesCategory && matchesStatus
+        }
+
+        if (filteredList.isEmpty()) {
+            tvEmpty.text = if (allEvents.isEmpty()) {
+                "Nenhum evento disponível no momento."
+            } else {
+                "Nenhum evento encontrado para os filtros selecionados."
+            }
+            tvEmpty.visibility = View.VISIBLE
+            rvEvents.visibility = View.GONE
+        } else {
+            tvEmpty.visibility = View.GONE
+            rvEvents.visibility = View.VISIBLE
+        }
+
+        adapter.updateEvents(filteredList)
+    }
+
+    private fun updateCategoriesFromEvents(eventsList: List<Event>) {
+        val uniqueCategories = eventsList.map { it.category }.filter { it.isNotEmpty() }.toSet()
+        var updated = false
+        for (cat in uniqueCategories) {
+            if (!categoryList.contains(cat)) {
+                categoryList.add(cat)
+                updated = true
+            }
+        }
+        if (updated) {
+            categoryAdapter.notifyDataSetChanged()
+        }
     }
 
     private fun openCommentsBottomSheet(eventId: String) {
@@ -177,14 +290,9 @@ class HomeActivity : AppCompatActivity() {
                         doc.toObject(Event::class.java)
                     }
 
-                    if (eventsList.isEmpty()) {
-                        tvEmpty.visibility = View.VISIBLE
-                        rvEvents.visibility = View.GONE
-                    } else {
-                        tvEmpty.visibility = View.GONE
-                        rvEvents.visibility = View.VISIBLE
-                        adapter.updateEvents(eventsList)
-                    }
+                    allEvents = eventsList
+                    updateCategoriesFromEvents(eventsList)
+                    filterEvents()
                 }
             }
     }

@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">CampusHub</string>
+    <string name="hint_search_events">Pesquisar evento...</string>
+    <string name="label_category">Categoria</string>
+    <string name="label_status">Situação</string>
+    <string name="filter_all_categories">Todas</string>
+    <string name="filter_all_status">Todos</string>
+    <string name="filter_status_open">Abertos</string>
+    <string name="filter_status_ended">Encerrados</string>
 </resources>
