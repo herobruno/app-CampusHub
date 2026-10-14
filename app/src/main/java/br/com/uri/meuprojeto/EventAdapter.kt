@@ -19,6 +19,7 @@ class EventAdapter(
     private val onFavoriteClick: ((Event) -> Unit)? = null,
     private val onCommentsClick: ((Event) -> Unit)? = null,
     private val onRateClick: ((Event) -> Unit)? = null,
+    private val onEventClick: ((Event) -> Unit)? = null,
 ) : RecyclerView.Adapter<EventAdapter.EventViewHolder>() {
 
     fun updateEvents(newEvents: List<Event>) {
@@ -33,7 +34,7 @@ class EventAdapter(
 
     override fun onBindViewHolder(holder: EventViewHolder, position: Int) {
         val event = events[position]
-        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick, onCommentsClick, onRateClick)
+        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick, onCommentsClick, onRateClick, onEventClick)
     }
 
     override fun getItemCount(): Int = events.size
@@ -63,6 +64,7 @@ class EventAdapter(
             onFavoriteClick: ((Event) -> Unit)?,
             onCommentsClick: ((Event) -> Unit)?,
             onRateClick: ((Event) -> Unit)?,
+            onEventClick: ((Event) -> Unit)?,
         ) {
             tvEventCategory.text = event.category
             tvEventTitle.text = event.title
@@ -151,6 +153,10 @@ class EventAdapter(
             }
             btnComments.setOnClickListener(clickCommentsListener)
             layoutComments.setOnClickListener(clickCommentsListener)
+
+            itemView.setOnClickListener {
+                onEventClick?.invoke(event)
+            }
         }
     }
 }

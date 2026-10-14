@@ -85,6 +85,7 @@ class HomeActivity : AppCompatActivity() {
             onFavoriteClick = { event -> toggleFavorite(event) },
             onCommentsClick = { event -> openCommentsBottomSheet(event.id) },
             onRateClick = { event -> showRatingDialog(event) },
+            onEventClick = { event -> openEventDetail(event.id) },
         )
         rvEvents.adapter = adapter
 
@@ -216,6 +217,13 @@ class HomeActivity : AppCompatActivity() {
     private fun openCommentsBottomSheet(eventId: String) {
         val fragment = CommentsBottomSheetFragment.newInstance(eventId)
         fragment.show(supportFragmentManager, "CommentsBottomSheetFragment")
+    }
+
+    private fun openEventDetail(eventId: String) {
+        val intent = Intent(this, EventDetailActivity::class.java).apply {
+            putExtra("EXTRA_EVENT_ID", eventId)
+        }
+        startActivity(intent)
     }
 
     private fun showRatingDialog(event: Event) {
