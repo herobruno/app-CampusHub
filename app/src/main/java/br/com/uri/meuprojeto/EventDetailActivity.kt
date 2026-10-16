@@ -8,6 +8,7 @@ import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.Gravity
 import android.view.View
 import android.widget.ImageButton
@@ -17,10 +18,12 @@ import android.widget.ProgressBar
 import android.widget.RatingBar
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -34,6 +37,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.io.File
+import java.io.FileOutputStream
 import java.util.Locale
 
 class EventDetailActivity : AppCompatActivity() {
@@ -45,6 +49,7 @@ class EventDetailActivity : AppCompatActivity() {
     private var currentEvent: Event? = null
     private var eventListener: ListenerRegistration? = null
     private var audiosListener: ListenerRegistration? = null
+    private var videosListener: ListenerRegistration? = null
 
     // Main Header Views
     private lateinit var btnBack: ImageButton
@@ -66,6 +71,7 @@ class EventDetailActivity : AppCompatActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var layoutTabLocation: MaterialCardView
     private lateinit var layoutTabAudios: LinearLayout
+    private lateinit var layoutTabVideos: LinearLayout
 
     // Tab 1: Local
     private lateinit var tvLocation: TextView
@@ -81,6 +87,15 @@ class EventDetailActivity : AppCompatActivity() {
     private lateinit var rvAudios: RecyclerView
     private lateinit var audioAdapter: EventAudioAdapter
 
+    // Tab 3: Vídeos
+    private lateinit var cardVideoActions: MaterialCardView
+    private lateinit var btnCaptureVideo: MaterialButton
+    private lateinit var btnPickVideo: MaterialButton
+    private lateinit var pbVideos: ProgressBar
+    private lateinit var tvEmptyVideos: TextView
+    private lateinit var rvVideos: RecyclerView
+    private lateinit var videoAdapter: EventVideoAdapter
+
     // Audio Recorder & Player State
     private var mediaRecorder: MediaRecorder? = null
     private var recordingFile: File? = null
@@ -88,11 +103,35 @@ class EventDetailActivity : AppCompatActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private var currentlyPlayingAudioId: String? = null
 
+    // Video Temp File & Uri
+    private var tempVideoFile: File? = null
+    private var tempVideoUri: Uri? = null
+
     private val requestAudioPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
             toggleAudioRecording()
         } else {
             Toast.makeText(this, "Permissão de gravação de áudio é necessária", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val requestCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            launchVideoCapture()
+        } else {
+            Toast.makeText(this, "Permissão de câmera é necessária para gravar vídeos", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val captureVideoLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK && tempVideoFile != null && tempVideoFile!!.exists()) {
+            saveAndUploadVideo(tempVideoFile!!)
+        }
+    }
+
+    private val pickVideoLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            saveUriLocallyAndUploadVideo(uri)
         }
     }
 
@@ -115,6 +154,7 @@ class EventDetailActivity : AppCompatActivity() {
         setupListeners()
         loadEventDetailsRealtime()
         loadEventAudiosRealtime()
+        loadEventVideosRealtime()
     }
 
     private fun initViews() {
@@ -136,6 +176,7 @@ class EventDetailActivity : AppCompatActivity() {
         tabLayout = findViewById(R.id.tabLayout)
         layoutTabLocation = findViewById(R.id.layoutTabLocation)
         layoutTabAudios = findViewById(R.id.layoutTabAudios)
+        layoutTabVideos = findViewById(R.id.layoutTabVideos)
 
         // Tab 1: Local
         tvLocation = findViewById(R.id.tvLocation)
@@ -150,7 +191,16 @@ class EventDetailActivity : AppCompatActivity() {
         tvEmptyAudios = findViewById(R.id.tvEmptyAudios)
         rvAudios = findViewById(R.id.rvAudios)
 
+        // Tab 3: Vídeos
+        cardVideoActions = findViewById(R.id.cardVideoActions)
+        btnCaptureVideo = findViewById(R.id.btnCaptureVideo)
+        btnPickVideo = findViewById(R.id.btnPickVideo)
+        pbVideos = findViewById(R.id.pbVideos)
+        tvEmptyVideos = findViewById(R.id.tvEmptyVideos)
+        rvVideos = findViewById(R.id.rvVideos)
+
         val currentUserId = auth.currentUser?.uid ?: ""
+
         rvAudios.layoutManager = LinearLayoutManager(this)
         audioAdapter = EventAudioAdapter(
             audios = emptyList(),
@@ -160,8 +210,18 @@ class EventDetailActivity : AppCompatActivity() {
         )
         rvAudios.adapter = audioAdapter
 
+        rvVideos.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        videoAdapter = EventVideoAdapter(
+            videos = emptyList(),
+            currentUserId = currentUserId,
+            onVideoClick = { video -> showVideoDialog(video) },
+            onDeleteClick = { video -> confirmDeleteVideo(video) }
+        )
+        rvVideos.adapter = videoAdapter
+
         if (auth.currentUser == null) {
             cardRecordAudio.visibility = View.GONE
+            cardVideoActions.visibility = View.GONE
         }
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
@@ -170,10 +230,17 @@ class EventDetailActivity : AppCompatActivity() {
                     0 -> {
                         layoutTabLocation.visibility = View.VISIBLE
                         layoutTabAudios.visibility = View.GONE
+                        layoutTabVideos.visibility = View.GONE
                     }
                     1 -> {
                         layoutTabLocation.visibility = View.GONE
                         layoutTabAudios.visibility = View.VISIBLE
+                        layoutTabVideos.visibility = View.GONE
+                    }
+                    2 -> {
+                        layoutTabLocation.visibility = View.GONE
+                        layoutTabAudios.visibility = View.GONE
+                        layoutTabVideos.visibility = View.VISIBLE
                     }
                 }
             }
@@ -204,6 +271,14 @@ class EventDetailActivity : AppCompatActivity() {
             checkAudioPermissionAndToggle()
         }
 
+        btnCaptureVideo.setOnClickListener {
+            checkCameraPermissionAndLaunchVideo()
+        }
+
+        btnPickVideo.setOnClickListener {
+            pickVideoLauncher.launch("video/*")
+        }
+
         layoutComments.setOnClickListener {
             CommentsBottomSheetFragment.newInstance(eventId).show(supportFragmentManager, "CommentsBottomSheetFragment")
         }
@@ -211,6 +286,14 @@ class EventDetailActivity : AppCompatActivity() {
         btnFavorite.setOnClickListener { currentEvent?.let { toggleFavorite(it) } }
         btnSubscribe.setOnClickListener { currentEvent?.let { toggleSubscription(it) } }
         btnRate.setOnClickListener { currentEvent?.let { showRatingDialog(it) } }
+    }
+
+    private fun checkCameraPermissionAndLaunchVideo() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            launchVideoCapture()
+        } else {
+            requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     // ==================== LÓGICA DE ÁUDIO ====================
@@ -352,11 +435,9 @@ class EventDetailActivity : AppCompatActivity() {
             audioAdapter.setCurrentlyPlayingId(null)
         }
 
-        // Apaga do Firestore
         db.collection("events").document(eventId).collection("audios").document(audio.id)
             .delete()
             .addOnSuccessListener {
-                // Apaga o arquivo local
                 try {
                     val file = File(audio.audioPath)
                     if (file.exists()) {
@@ -382,6 +463,161 @@ class EventDetailActivity : AppCompatActivity() {
                     tvEmptyAudios.visibility = if (audios.isEmpty()) View.VISIBLE else View.GONE
                     rvAudios.visibility = if (audios.isEmpty()) View.GONE else View.VISIBLE
                     audioAdapter.updateAudios(audios)
+                }
+            }
+    }
+
+    // ==================== LÓGICA DE VÍDEO ====================
+
+    private fun launchVideoCapture() {
+        try {
+            val videosDir = File(filesDir, "event_videos").apply { if (!exists()) mkdirs() }
+            tempVideoFile = File(videosDir, "temp_video_${System.currentTimeMillis()}.mp4")
+            tempVideoUri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.fileprovider", tempVideoFile!!)
+
+            val cameraIntent = Intent(MediaStore.ACTION_VIDEO_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, tempVideoUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+
+            val resInfoList = packageManager.queryIntentActivities(cameraIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            for (resolveInfo in resInfoList) {
+                val packageName = resolveInfo.activityInfo.packageName
+                grantUriPermission(packageName, tempVideoUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            captureVideoLauncher.launch(cameraIntent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao abrir gravador de vídeo: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveUriLocallyAndUploadVideo(uri: Uri) {
+        try {
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                val videosDir = File(filesDir, "event_videos").apply { if (!exists()) mkdirs() }
+                val targetFile = File(videosDir, "video_${System.currentTimeMillis()}.mp4")
+                FileOutputStream(targetFile).use { output -> inputStream.copyTo(output) }
+                saveAndUploadVideo(targetFile)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao salvar vídeo: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveAndUploadVideo(file: File) {
+        val user = auth.currentUser ?: return
+        val videoId = db.collection("events").document(eventId).collection("videos").document().id
+        val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+
+        val video = EventVideo(
+            id = videoId,
+            eventId = eventId,
+            userId = user.uid,
+            userName = userName,
+            videoPath = file.absolutePath,
+            createdAt = System.currentTimeMillis()
+        )
+
+        db.collection("events").document(eventId).collection("videos").document(videoId).set(video)
+            .addOnSuccessListener { Toast.makeText(this, "Vídeo publicado!", Toast.LENGTH_SHORT).show() }
+            .addOnFailureListener { e -> Toast.makeText(this, "Erro ao publicar vídeo: ${e.message}", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun showVideoDialog(video: EventVideo) {
+        val dialog = AlertDialog.Builder(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+            .create()
+
+        val frameLayout = android.widget.FrameLayout(this).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(android.graphics.Color.BLACK)
+        }
+
+        val videoView = EventVideoView(this).apply {
+            setVideoPath(video.videoPath)
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            )
+            setOnPreparedListener { mp ->
+                mp.isLooping = true
+            }
+        }
+
+        val btnClose = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_back)
+            setColorFilter(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setPadding(32, 32, 32, 32)
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                setMargins(24, 48, 24, 24)
+            }
+            setOnClickListener {
+                videoView.stopPlayback()
+                dialog.dismiss()
+            }
+        }
+
+        frameLayout.addView(videoView)
+        frameLayout.addView(btnClose)
+
+        dialog.setView(frameLayout)
+        dialog.show()
+
+        videoView.start()
+    }
+
+    private fun confirmDeleteVideo(video: EventVideo) {
+        AlertDialog.Builder(this)
+            .setTitle("Excluir Vídeo")
+            .setMessage("Deseja realmente excluir este vídeo?")
+            .setPositiveButton("Excluir") { dialog, _ ->
+                deleteVideo(video)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancelar") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun deleteVideo(video: EventVideo) {
+        db.collection("events").document(eventId).collection("videos").document(video.id)
+            .delete()
+            .addOnSuccessListener {
+                try {
+                    val file = File(video.videoPath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (_: Exception) {}
+
+                Toast.makeText(this, "Vídeo excluído com sucesso!", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Erro ao excluir vídeo: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    private fun loadEventVideosRealtime() {
+        pbVideos.visibility = View.VISIBLE
+        videosListener = db.collection("events").document(eventId).collection("videos")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                pbVideos.visibility = View.GONE
+                if (snapshot != null) {
+                    val videos = snapshot.documents.mapNotNull { doc -> doc.toObject(EventVideo::class.java) }
+                    tvEmptyVideos.visibility = if (videos.isEmpty()) View.VISIBLE else View.GONE
+                    rvVideos.visibility = if (videos.isEmpty()) View.GONE else View.VISIBLE
+                    videoAdapter.updateVideos(videos)
                 }
             }
     }
@@ -527,6 +763,7 @@ class EventDetailActivity : AppCompatActivity() {
         super.onDestroy()
         eventListener?.remove()
         audiosListener?.remove()
+        videosListener?.remove()
 
         mediaPlayer?.release()
         mediaRecorder?.release()

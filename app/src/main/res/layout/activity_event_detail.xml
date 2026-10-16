@@ -275,6 +275,11 @@
                     android:layout_height="wrap_content"
                     android:text="Áudios" />
 
+                <com.google.android.material.tabs.TabItem
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Vídeos" />
+
             </com.google.android.material.tabs.TabLayout>
 
             <!-- TAB 1: LOCALIZAÇÃO -->
@@ -423,6 +428,88 @@
                     android:layout_height="wrap_content"
                     android:nestedScrollingEnabled="false"
                     tools:listitem="@layout/item_event_audio" />
+
+            </LinearLayout>
+
+            <!-- TAB 3: VÍDEOS (FEED ESTILO TIKTOK) -->
+            <LinearLayout
+                android:id="@+id/layoutTabVideos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Card de Ação dos Vídeos (Gravar / Galeria) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardVideoActions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@color/white"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:padding="16dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnCaptureVideo"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1"
+                            android:text="Gravar Vídeo"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:backgroundTint="@color/primary_blue"
+                            app:cornerRadius="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPickVideo"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:text="Galeria"
+                            android:textColor="@color/primary_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="10dp"
+                            app:strokeColor="@color/primary_blue" />
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <ProgressBar
+                    android:id="@+id/pbVideos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginVertical="16dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvEmptyVideos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="24dp"
+                    android:gravity="center"
+                    android:text="Nenhum vídeo publicado ainda neste evento."
+                    android:textColor="@color/gray_text"
+                    android:textSize="14sp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvVideos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    tools:listitem="@layout/item_event_video" />
 
             </LinearLayout>
 
