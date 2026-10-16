@@ -1,20 +1,30 @@
 package br.com.uri.meuprojeto
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.MediaPlayer
+import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.RatingBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -23,6 +33,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import java.io.File
 import java.util.Locale
 
 class EventDetailActivity : AppCompatActivity() {
@@ -33,6 +44,7 @@ class EventDetailActivity : AppCompatActivity() {
     private var eventId: String = ""
     private var currentEvent: Event? = null
     private var eventListener: ListenerRegistration? = null
+    private var audiosListener: ListenerRegistration? = null
 
     // Main Header Views
     private lateinit var btnBack: ImageButton
@@ -50,12 +62,39 @@ class EventDetailActivity : AppCompatActivity() {
     private lateinit var layoutComments: LinearLayout
     private lateinit var tvCommentCount: TextView
 
-    // Tab Layout & Location
+    // Tab Layout & Containers
     private lateinit var tabLayout: TabLayout
     private lateinit var layoutTabLocation: MaterialCardView
+    private lateinit var layoutTabAudios: LinearLayout
+
+    // Tab 1: Local
     private lateinit var tvLocation: TextView
     private lateinit var btnOpenMaps: MaterialButton
     private lateinit var tvDescription: TextView
+
+    // Tab 2: Áudios
+    private lateinit var cardRecordAudio: MaterialCardView
+    private lateinit var btnRecordAudio: MaterialButton
+    private lateinit var tvRecordingStatus: TextView
+    private lateinit var pbAudios: ProgressBar
+    private lateinit var tvEmptyAudios: TextView
+    private lateinit var rvAudios: RecyclerView
+    private lateinit var audioAdapter: EventAudioAdapter
+
+    // Audio Recorder & Player State
+    private var mediaRecorder: MediaRecorder? = null
+    private var recordingFile: File? = null
+    private var isRecordingAudio: Boolean = false
+    private var mediaPlayer: MediaPlayer? = null
+    private var currentlyPlayingAudioId: String? = null
+
+    private val requestAudioPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            toggleAudioRecording()
+        } else {
+            Toast.makeText(this, "Permissão de gravação de áudio é necessária", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +114,7 @@ class EventDetailActivity : AppCompatActivity() {
         initViews()
         setupListeners()
         loadEventDetailsRealtime()
+        loadEventAudiosRealtime()
     }
 
     private fun initViews() {
@@ -95,15 +135,46 @@ class EventDetailActivity : AppCompatActivity() {
 
         tabLayout = findViewById(R.id.tabLayout)
         layoutTabLocation = findViewById(R.id.layoutTabLocation)
+        layoutTabAudios = findViewById(R.id.layoutTabAudios)
+
+        // Tab 1: Local
         tvLocation = findViewById(R.id.tvLocation)
         btnOpenMaps = findViewById(R.id.btnOpenMaps)
         tvDescription = findViewById(R.id.tvDescription)
 
-        // Configuração inicial das Abas
+        // Tab 2: Áudios
+        cardRecordAudio = findViewById(R.id.cardRecordAudio)
+        btnRecordAudio = findViewById(R.id.btnRecordAudio)
+        tvRecordingStatus = findViewById(R.id.tvRecordingStatus)
+        pbAudios = findViewById(R.id.pbAudios)
+        tvEmptyAudios = findViewById(R.id.tvEmptyAudios)
+        rvAudios = findViewById(R.id.rvAudios)
+
+        val currentUserId = auth.currentUser?.uid ?: ""
+        rvAudios.layoutManager = LinearLayoutManager(this)
+        audioAdapter = EventAudioAdapter(
+            audios = emptyList(),
+            currentUserId = currentUserId,
+            onPlayClick = { audio -> handleAudioPlayPause(audio) },
+            onDeleteClick = { audio -> confirmDeleteAudio(audio) }
+        )
+        rvAudios.adapter = audioAdapter
+
+        if (auth.currentUser == null) {
+            cardRecordAudio.visibility = View.GONE
+        }
+
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 when (tab?.position) {
-                    0 -> layoutTabLocation.visibility = View.VISIBLE
+                    0 -> {
+                        layoutTabLocation.visibility = View.VISIBLE
+                        layoutTabAudios.visibility = View.GONE
+                    }
+                    1 -> {
+                        layoutTabLocation.visibility = View.GONE
+                        layoutTabAudios.visibility = View.VISIBLE
+                    }
                 }
             }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
@@ -129,6 +200,10 @@ class EventDetailActivity : AppCompatActivity() {
             }
         }
 
+        btnRecordAudio.setOnClickListener {
+            checkAudioPermissionAndToggle()
+        }
+
         layoutComments.setOnClickListener {
             CommentsBottomSheetFragment.newInstance(eventId).show(supportFragmentManager, "CommentsBottomSheetFragment")
         }
@@ -137,6 +212,181 @@ class EventDetailActivity : AppCompatActivity() {
         btnSubscribe.setOnClickListener { currentEvent?.let { toggleSubscription(it) } }
         btnRate.setOnClickListener { currentEvent?.let { showRatingDialog(it) } }
     }
+
+    // ==================== LÓGICA DE ÁUDIO ====================
+
+    private fun checkAudioPermissionAndToggle() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            toggleAudioRecording()
+        } else {
+            requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun toggleAudioRecording() {
+        if (!isRecordingAudio) {
+            startAudioRecording()
+        } else {
+            stopAudioRecordingAndUpload()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun createMediaRecorder(): MediaRecorder {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(this)
+        } else {
+            MediaRecorder()
+        }
+    }
+
+    private fun startAudioRecording() {
+        try {
+            val audiosDir = File(filesDir, "event_audios").apply { if (!exists()) mkdirs() }
+            recordingFile = File(audiosDir, "audio_${System.currentTimeMillis()}.m4a")
+
+            mediaRecorder = createMediaRecorder().apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(recordingFile!!.absolutePath)
+                prepare()
+                start()
+            }
+
+            isRecordingAudio = true
+            btnRecordAudio.text = "Parar Gravação"
+            btnRecordAudio.setBackgroundColor("#FFD32F2F".toColorInt())
+            tvRecordingStatus.text = "Gravando áudio..."
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao iniciar gravação: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun stopAudioRecordingAndUpload() {
+        try {
+            mediaRecorder?.apply {
+                stop()
+                release()
+            }
+            mediaRecorder = null
+            isRecordingAudio = false
+
+            btnRecordAudio.text = "Gravar Áudio"
+            btnRecordAudio.setBackgroundColor(ContextCompat.getColor(this, R.color.primary_blue))
+            tvRecordingStatus.text = "Clique para iniciar a gravação"
+
+            if (recordingFile != null && recordingFile!!.exists()) {
+                val user = auth.currentUser ?: return
+                val audioId = db.collection("events").document(eventId).collection("audios").document().id
+                val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+
+                val audio = EventAudio(
+                    id = audioId,
+                    eventId = eventId,
+                    userId = user.uid,
+                    userName = userName,
+                    audioPath = recordingFile!!.absolutePath,
+                    createdAt = System.currentTimeMillis()
+                )
+
+                db.collection("events").document(eventId).collection("audios").document(audioId).set(audio)
+                    .addOnSuccessListener { Toast.makeText(this, "Áudio publicado!", Toast.LENGTH_SHORT).show() }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao finalizar gravação: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun handleAudioPlayPause(audio: EventAudio) {
+        if (currentlyPlayingAudioId == audio.id) {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
+            currentlyPlayingAudioId = null
+            audioAdapter.setCurrentlyPlayingId(null)
+            return
+        }
+
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(audio.audioPath)
+                prepare()
+                start()
+                setOnCompletionListener {
+                    currentlyPlayingAudioId = null
+                    audioAdapter.setCurrentlyPlayingId(null)
+                }
+            }
+
+            currentlyPlayingAudioId = audio.id
+            audioAdapter.setCurrentlyPlayingId(audio.id)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao reproduzir áudio: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun confirmDeleteAudio(audio: EventAudio) {
+        AlertDialog.Builder(this)
+            .setTitle("Excluir Áudio")
+            .setMessage("Deseja realmente excluir este áudio?")
+            .setPositiveButton("Excluir") { dialog, _ ->
+                deleteAudio(audio)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancelar") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun deleteAudio(audio: EventAudio) {
+        if (currentlyPlayingAudioId == audio.id) {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
+            currentlyPlayingAudioId = null
+            audioAdapter.setCurrentlyPlayingId(null)
+        }
+
+        // Apaga do Firestore
+        db.collection("events").document(eventId).collection("audios").document(audio.id)
+            .delete()
+            .addOnSuccessListener {
+                // Apaga o arquivo local
+                try {
+                    val file = File(audio.audioPath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (_: Exception) {}
+
+                Toast.makeText(this, "Áudio excluído com sucesso!", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Erro ao excluir áudio: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    private fun loadEventAudiosRealtime() {
+        pbAudios.visibility = View.VISIBLE
+        audiosListener = db.collection("events").document(eventId).collection("audios")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                pbAudios.visibility = View.GONE
+                if (snapshot != null) {
+                    val audios = snapshot.documents.mapNotNull { doc -> doc.toObject(EventAudio::class.java) }
+                    tvEmptyAudios.visibility = if (audios.isEmpty()) View.VISIBLE else View.GONE
+                    rvAudios.visibility = if (audios.isEmpty()) View.GONE else View.VISIBLE
+                    audioAdapter.updateAudios(audios)
+                }
+            }
+    }
+
+    // ==================== OUTROS DADOS DO EVENTO ====================
 
     private fun loadEventDetailsRealtime() {
         eventListener = db.collection("events").document(eventId)
@@ -276,5 +526,9 @@ class EventDetailActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         eventListener?.remove()
+        audiosListener?.remove()
+
+        mediaPlayer?.release()
+        mediaRecorder?.release()
     }
 }

@@ -270,9 +270,14 @@
                     android:layout_height="wrap_content"
                     android:text="Localização" />
 
+                <com.google.android.material.tabs.TabItem
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Áudios" />
+
             </com.google.android.material.tabs.TabLayout>
 
-            <!-- TAB LOCALIZAÇÃO -->
+            <!-- TAB 1: LOCALIZAÇÃO -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/layoutTabLocation"
                 android:layout_width="match_parent"
@@ -344,6 +349,82 @@
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- TAB 2: ÁUDIOS -->
+            <LinearLayout
+                android:id="@+id/layoutTabAudios"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Card de Gravação -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardRecordAudio"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@color/white"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnRecordAudio"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:text="Gravar Áudio"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:backgroundTint="@color/primary_blue"
+                            app:cornerRadius="10dp" />
+
+                        <TextView
+                            android:id="@+id/tvRecordingStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Clique para iniciar a gravação"
+                            android:textColor="@color/gray_text"
+                            android:textSize="13sp" />
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <ProgressBar
+                    android:id="@+id/pbAudios"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginVertical="16dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvEmptyAudios"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="24dp"
+                    android:gravity="center"
+                    android:text="Nenhum áudio publicado ainda neste evento."
+                    android:textColor="@color/gray_text"
+                    android:textSize="14sp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvAudios"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    tools:listitem="@layout/item_event_audio" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
