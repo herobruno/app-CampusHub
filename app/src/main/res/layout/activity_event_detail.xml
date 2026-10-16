@@ -261,6 +261,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:background="@color/white"
+                app:tabIconTint="@color/tab_icon_selector"
                 app:tabIndicatorColor="@color/primary_blue"
                 app:tabSelectedTextColor="@color/primary_blue"
                 app:tabTextColor="@color/gray_text">
@@ -268,7 +269,12 @@
                 <com.google.android.material.tabs.TabItem
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Localização" />
+                    android:icon="@drawable/ic_location" />
+
+                <com.google.android.material.tabs.TabItem
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Fotos" />
 
                 <com.google.android.material.tabs.TabItem
                     android:layout_width="wrap_content"
@@ -355,7 +361,90 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- TAB 2: ÁUDIOS -->
+            <!-- TAB 2: FOTOS -->
+            <LinearLayout
+                android:id="@+id/layoutTabPhotos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Card de Ação das Fotos (Tirar Foto / Galeria) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardPhotoActions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@color/white"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:padding="16dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnTakePhoto"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1"
+                            android:text="Tirar Foto"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:backgroundTint="@color/primary_blue"
+                            app:cornerRadius="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPickGalleryPhoto"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:text="Galeria"
+                            android:textColor="@color/primary_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="10dp"
+                            app:strokeColor="@color/primary_blue" />
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <ProgressBar
+                    android:id="@+id/pbPhotos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginVertical="16dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvEmptyPhotos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="24dp"
+                    android:gravity="center"
+                    android:text="Nenhuma foto publicada ainda neste evento."
+                    android:textColor="@color/gray_text"
+                    android:textSize="14sp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvPhotos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clipToPadding="false"
+                    android:orientation="horizontal"
+                    tools:listitem="@layout/item_event_photo" />
+
+            </LinearLayout>
+
+            <!-- TAB 3: ÁUDIOS -->
             <LinearLayout
                 android:id="@+id/layoutTabAudios"
                 android:layout_width="match_parent"
@@ -431,7 +520,7 @@
 
             </LinearLayout>
 
-            <!-- TAB 3: VÍDEOS (FEED ESTILO TIKTOK) -->
+            <!-- TAB 4: VÍDEOS -->
             <LinearLayout
                 android:id="@+id/layoutTabVideos"
                 android:layout_width="match_parent"

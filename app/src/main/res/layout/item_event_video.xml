@@ -39,16 +39,15 @@
 
             <ImageButton
                 android:id="@+id/btnDeleteVideo"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:layout_gravity="end|top"
-                android:layout_margin="6dp"
-                android:background="@drawable/ic_launcher_background"
-                android:backgroundTint="#99000000"
+                android:layout_margin="8dp"
+                android:background="@drawable/bg_delete_circle"
                 android:contentDescription="Excluir Vídeo"
-                android:padding="6dp"
+                android:padding="8dp"
                 android:visibility="gone"
-                app:srcCompat="@android:drawable/ic_menu_delete"
+                app:srcCompat="@drawable/ic_trash"
                 app:tint="@color/white" />
 
         </FrameLayout>

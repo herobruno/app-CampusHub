@@ -38,6 +38,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 class EventDetailActivity : AppCompatActivity() {
@@ -48,6 +50,7 @@ class EventDetailActivity : AppCompatActivity() {
     private var eventId: String = ""
     private var currentEvent: Event? = null
     private var eventListener: ListenerRegistration? = null
+    private var photosListener: ListenerRegistration? = null
     private var audiosListener: ListenerRegistration? = null
     private var videosListener: ListenerRegistration? = null
 
@@ -70,6 +73,7 @@ class EventDetailActivity : AppCompatActivity() {
     // Tab Layout & Containers
     private lateinit var tabLayout: TabLayout
     private lateinit var layoutTabLocation: MaterialCardView
+    private lateinit var layoutTabPhotos: LinearLayout
     private lateinit var layoutTabAudios: LinearLayout
     private lateinit var layoutTabVideos: LinearLayout
 
@@ -78,7 +82,16 @@ class EventDetailActivity : AppCompatActivity() {
     private lateinit var btnOpenMaps: MaterialButton
     private lateinit var tvDescription: TextView
 
-    // Tab 2: Áudios
+    // Tab 2: Fotos
+    private lateinit var cardPhotoActions: MaterialCardView
+    private lateinit var btnTakePhoto: MaterialButton
+    private lateinit var btnPickGalleryPhoto: MaterialButton
+    private lateinit var pbPhotos: ProgressBar
+    private lateinit var tvEmptyPhotos: TextView
+    private lateinit var rvPhotos: RecyclerView
+    private lateinit var photoAdapter: EventPhotoAdapter
+
+    // Tab 3: Áudios
     private lateinit var cardRecordAudio: MaterialCardView
     private lateinit var btnRecordAudio: MaterialButton
     private lateinit var tvRecordingStatus: TextView
@@ -87,7 +100,7 @@ class EventDetailActivity : AppCompatActivity() {
     private lateinit var rvAudios: RecyclerView
     private lateinit var audioAdapter: EventAudioAdapter
 
-    // Tab 3: Vídeos
+    // Tab 4: Vídeos
     private lateinit var cardVideoActions: MaterialCardView
     private lateinit var btnCaptureVideo: MaterialButton
     private lateinit var btnPickVideo: MaterialButton
@@ -95,6 +108,10 @@ class EventDetailActivity : AppCompatActivity() {
     private lateinit var tvEmptyVideos: TextView
     private lateinit var rvVideos: RecyclerView
     private lateinit var videoAdapter: EventVideoAdapter
+
+    // Temp File & Uri for Photo
+    private var tempPhotoFile: File? = null
+    private var tempPhotoImageUri: Uri? = null
 
     // Audio Recorder & Player State
     private var mediaRecorder: MediaRecorder? = null
@@ -106,6 +123,26 @@ class EventDetailActivity : AppCompatActivity() {
     // Video Temp File & Uri
     private var tempVideoFile: File? = null
     private var tempVideoUri: Uri? = null
+
+    private val requestPhotoPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            launchPhotoCapture()
+        } else {
+            Toast.makeText(this, "Permissão de câmera é necessária para tirar fotos", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val takePhotoLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK && tempPhotoFile != null && tempPhotoFile!!.exists()) {
+            saveAndUploadPhoto(tempPhotoFile!!)
+        }
+    }
+
+    private val pickPhotoLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            saveUriLocallyAndUploadPhoto(uri)
+        }
+    }
 
     private val requestAudioPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
@@ -153,6 +190,7 @@ class EventDetailActivity : AppCompatActivity() {
         initViews()
         setupListeners()
         loadEventDetailsRealtime()
+        loadEventPhotosRealtime()
         loadEventAudiosRealtime()
         loadEventVideosRealtime()
     }
@@ -175,6 +213,7 @@ class EventDetailActivity : AppCompatActivity() {
 
         tabLayout = findViewById(R.id.tabLayout)
         layoutTabLocation = findViewById(R.id.layoutTabLocation)
+        layoutTabPhotos = findViewById(R.id.layoutTabPhotos)
         layoutTabAudios = findViewById(R.id.layoutTabAudios)
         layoutTabVideos = findViewById(R.id.layoutTabVideos)
 
@@ -183,7 +222,15 @@ class EventDetailActivity : AppCompatActivity() {
         btnOpenMaps = findViewById(R.id.btnOpenMaps)
         tvDescription = findViewById(R.id.tvDescription)
 
-        // Tab 2: Áudios
+        // Tab 2: Fotos
+        cardPhotoActions = findViewById(R.id.cardPhotoActions)
+        btnTakePhoto = findViewById(R.id.btnTakePhoto)
+        btnPickGalleryPhoto = findViewById(R.id.btnPickGalleryPhoto)
+        pbPhotos = findViewById(R.id.pbPhotos)
+        tvEmptyPhotos = findViewById(R.id.tvEmptyPhotos)
+        rvPhotos = findViewById(R.id.rvPhotos)
+
+        // Tab 3: Áudios
         cardRecordAudio = findViewById(R.id.cardRecordAudio)
         btnRecordAudio = findViewById(R.id.btnRecordAudio)
         tvRecordingStatus = findViewById(R.id.tvRecordingStatus)
@@ -191,7 +238,7 @@ class EventDetailActivity : AppCompatActivity() {
         tvEmptyAudios = findViewById(R.id.tvEmptyAudios)
         rvAudios = findViewById(R.id.rvAudios)
 
-        // Tab 3: Vídeos
+        // Tab 4: Vídeos
         cardVideoActions = findViewById(R.id.cardVideoActions)
         btnCaptureVideo = findViewById(R.id.btnCaptureVideo)
         btnPickVideo = findViewById(R.id.btnPickVideo)
@@ -200,6 +247,15 @@ class EventDetailActivity : AppCompatActivity() {
         rvVideos = findViewById(R.id.rvVideos)
 
         val currentUserId = auth.currentUser?.uid ?: ""
+
+        rvPhotos.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        photoAdapter = EventPhotoAdapter(
+            photos = emptyList(),
+            currentUserId = currentUserId,
+            onPhotoClick = { photo -> showPhotoDialog(photo) },
+            onDeleteClick = { photo -> confirmDeletePhoto(photo) }
+        )
+        rvPhotos.adapter = photoAdapter
 
         rvAudios.layoutManager = LinearLayoutManager(this)
         audioAdapter = EventAudioAdapter(
@@ -220,6 +276,7 @@ class EventDetailActivity : AppCompatActivity() {
         rvVideos.adapter = videoAdapter
 
         if (auth.currentUser == null) {
+            cardPhotoActions.visibility = View.GONE
             cardRecordAudio.visibility = View.GONE
             cardVideoActions.visibility = View.GONE
         }
@@ -229,16 +286,25 @@ class EventDetailActivity : AppCompatActivity() {
                 when (tab?.position) {
                     0 -> {
                         layoutTabLocation.visibility = View.VISIBLE
+                        layoutTabPhotos.visibility = View.GONE
                         layoutTabAudios.visibility = View.GONE
                         layoutTabVideos.visibility = View.GONE
                     }
                     1 -> {
                         layoutTabLocation.visibility = View.GONE
-                        layoutTabAudios.visibility = View.VISIBLE
+                        layoutTabPhotos.visibility = View.VISIBLE
+                        layoutTabAudios.visibility = View.GONE
                         layoutTabVideos.visibility = View.GONE
                     }
                     2 -> {
                         layoutTabLocation.visibility = View.GONE
+                        layoutTabPhotos.visibility = View.GONE
+                        layoutTabAudios.visibility = View.VISIBLE
+                        layoutTabVideos.visibility = View.GONE
+                    }
+                    3 -> {
+                        layoutTabLocation.visibility = View.GONE
+                        layoutTabPhotos.visibility = View.GONE
                         layoutTabAudios.visibility = View.GONE
                         layoutTabVideos.visibility = View.VISIBLE
                     }
@@ -267,6 +333,14 @@ class EventDetailActivity : AppCompatActivity() {
             }
         }
 
+        btnTakePhoto.setOnClickListener {
+            checkCameraPermissionAndLaunchPhoto()
+        }
+
+        btnPickGalleryPhoto.setOnClickListener {
+            pickPhotoLauncher.launch("image/*")
+        }
+
         btnRecordAudio.setOnClickListener {
             checkAudioPermissionAndToggle()
         }
@@ -288,12 +362,151 @@ class EventDetailActivity : AppCompatActivity() {
         btnRate.setOnClickListener { currentEvent?.let { showRatingDialog(it) } }
     }
 
+    // ==================== LÓGICA DE FOTO ====================
+
+    private fun checkCameraPermissionAndLaunchPhoto() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            launchPhotoCapture()
+        } else {
+            requestPhotoPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     private fun checkCameraPermissionAndLaunchVideo() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             launchVideoCapture()
         } else {
             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    private fun launchPhotoCapture() {
+        try {
+            val photosDir = File(filesDir, "event_photos").apply { if (!exists()) mkdirs() }
+            tempPhotoFile = File(photosDir, "temp_photo_${System.currentTimeMillis()}.jpg")
+            tempPhotoImageUri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.fileprovider", tempPhotoFile!!)
+
+            val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, tempPhotoImageUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+
+            val resInfoList = packageManager.queryIntentActivities(cameraIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            for (resolveInfo in resInfoList) {
+                val packageName = resolveInfo.activityInfo.packageName
+                grantUriPermission(packageName, tempPhotoImageUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            takePhotoLauncher.launch(cameraIntent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao abrir câmera: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveUriLocallyAndUploadPhoto(uri: Uri) {
+        try {
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                val photosDir = File(filesDir, "event_photos").apply { if (!exists()) mkdirs() }
+                val targetFile = File(photosDir, "photo_${System.currentTimeMillis()}.jpg")
+                FileOutputStream(targetFile).use { output -> inputStream.copyTo(output) }
+                saveAndUploadPhoto(targetFile)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao salvar foto: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveAndUploadPhoto(file: File) {
+        val user = auth.currentUser ?: return
+        val photoId = db.collection("events").document(eventId).collection("photos").document().id
+        val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+
+        val photo = EventPhoto(
+            id = photoId,
+            eventId = eventId,
+            userId = user.uid,
+            userName = userName,
+            photoPath = file.absolutePath,
+            createdAt = System.currentTimeMillis()
+        )
+
+        db.collection("events").document(eventId).collection("photos").document(photoId).set(photo)
+            .addOnSuccessListener { Toast.makeText(this, "Foto publicada!", Toast.LENGTH_SHORT).show() }
+            .addOnFailureListener { e -> Toast.makeText(this, "Erro ao publicar foto: ${e.message}", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun showPhotoDialog(photo: EventPhoto) {
+        val dialogView = layoutInflater.inflate(R.layout.item_event_photo, null)
+        val ivPhoto = dialogView.findViewById<ImageView>(R.id.ivPhoto)
+        val tvAuthor = dialogView.findViewById<TextView>(R.id.tvAuthor)
+        val tvDate = dialogView.findViewById<TextView>(R.id.tvDate)
+
+        ivPhoto.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 800)
+        val authorName = photo.userName.ifEmpty { "Usuário" }
+        tvAuthor.text = "Publicado por: $authorName"
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale.getDefault())
+        tvDate.text = dateFormat.format(Date(photo.createdAt))
+
+        val photoSource: Any = if (photo.photoPath.startsWith("content://") || photo.photoPath.startsWith("file://")) {
+            photo.photoPath
+        } else {
+            File(photo.photoPath)
+        }
+
+        Glide.with(this).load(photoSource).placeholder(R.drawable.ic_launcher_background).into(ivPhoto)
+
+        AlertDialog.Builder(this)
+            .setTitle("Foto do Evento")
+            .setView(dialogView)
+            .setPositiveButton("Fechar") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun confirmDeletePhoto(photo: EventPhoto) {
+        AlertDialog.Builder(this)
+            .setTitle("Excluir Foto")
+            .setMessage("Deseja realmente excluir esta foto?")
+            .setPositiveButton("Excluir") { dialog, _ ->
+                deletePhoto(photo)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancelar") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun deletePhoto(photo: EventPhoto) {
+        db.collection("events").document(eventId).collection("photos").document(photo.id)
+            .delete()
+            .addOnSuccessListener {
+                try {
+                    val file = File(photo.photoPath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (_: Exception) {}
+
+                Toast.makeText(this, "Foto excluída com sucesso!", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Erro ao excluir foto: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    private fun loadEventPhotosRealtime() {
+        pbPhotos.visibility = View.VISIBLE
+        photosListener = db.collection("events").document(eventId).collection("photos")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                pbPhotos.visibility = View.GONE
+                if (snapshot != null) {
+                    val photos = snapshot.documents.mapNotNull { doc -> doc.toObject(EventPhoto::class.java) }
+                    tvEmptyPhotos.visibility = if (photos.isEmpty()) View.VISIBLE else View.GONE
+                    rvPhotos.visibility = if (photos.isEmpty()) View.GONE else View.VISIBLE
+                    photoAdapter.updatePhotos(photos)
+                }
+            }
     }
 
     // ==================== LÓGICA DE ÁUDIO ====================
@@ -762,6 +975,7 @@ class EventDetailActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         eventListener?.remove()
+        photosListener?.remove()
         audiosListener?.remove()
         videosListener?.remove()
 
