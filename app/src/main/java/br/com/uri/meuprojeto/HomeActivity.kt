@@ -396,9 +396,13 @@ class HomeActivity : AppCompatActivity() {
                 eventId = event.id,
                 creatorId = event.creatorId,
                 title = event.title,
+                description = event.description,
                 date = event.date,
                 location = event.location,
-                imageUrl = event.imageUrl
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
             )
 
             userSubRef.set(subscriber)
@@ -432,9 +436,13 @@ class HomeActivity : AppCompatActivity() {
                 eventId = event.id,
                 creatorId = event.creatorId,
                 title = event.title,
+                description = event.description,
                 date = event.date,
                 location = event.location,
-                imageUrl = event.imageUrl
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
             )
 
             userFavRef.set(favoriteObj)

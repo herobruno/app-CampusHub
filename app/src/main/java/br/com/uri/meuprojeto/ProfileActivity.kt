@@ -15,11 +15,11 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
@@ -43,6 +43,7 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var tvProfileHeaderEmail: TextView
     private lateinit var tvUserInitial: TextView
     private lateinit var cardEditProfile: MaterialCardView
+    private lateinit var btnManageMyEvents: MaterialButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +69,7 @@ class ProfileActivity : AppCompatActivity() {
         tvProfileHeaderEmail = findViewById(R.id.tvProfileHeaderEmail)
         tvUserInitial = findViewById(R.id.tvUserInitial)
         cardEditProfile = findViewById(R.id.cardEditProfile)
+        btnManageMyEvents = findViewById(R.id.btnManageMyEvents)
         tabLayoutProfile = findViewById(R.id.tabLayoutProfile)
         rvMyEvents = findViewById(R.id.rvMyEvents)
         tvNoMyEvents = findViewById(R.id.tvNoMyEvents)
@@ -121,6 +123,10 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
 
+        btnManageMyEvents.setOnClickListener {
+            startActivity(Intent(this, MyEventsActivity::class.java))
+        }
+
         btnSaveProfile.setOnClickListener {
             val newName = etProfileName.text.toString().trim()
 
@@ -162,7 +168,7 @@ class ProfileActivity : AppCompatActivity() {
                 }
         }
 
-        // Configuração das Abas (Inscrições vs Favoritos vs Criados por Mim)
+        // Configuração das Abas (Inscrições vs Favoritos)
         tabLayoutProfile.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 refreshActiveTab()
@@ -206,7 +212,6 @@ class ProfileActivity : AppCompatActivity() {
         when (tabLayoutProfile.selectedTabPosition) {
             0 -> loadSubscribedEvents(user.uid, "Você ainda não está inscrito em nenhum evento.")
             1 -> loadFavoriteEvents(user.uid, "Você ainda não possui eventos favoritados.")
-            2 -> loadCreatedEvents(user.uid, "Você ainda não criou nenhum evento.")
             else -> loadSubscribedEvents(user.uid, "Você ainda não está inscrito em nenhum evento.")
         }
     }
@@ -329,22 +334,24 @@ class ProfileActivity : AppCompatActivity() {
                         rvMyEvents.visibility = View.GONE
                         eventAdapter.updateEvents(emptyList())
                     } else {
-                        // Renderização imediata dos eventos a partir dos dados do Subscriber
                         val initialList = subscriberDocs.map { sub ->
                             Event(
                                 id = sub.eventId,
                                 creatorId = sub.creatorId,
                                 title = sub.title,
+                                description = sub.description,
                                 date = sub.date,
                                 location = sub.location,
-                                imageUrl = sub.imageUrl
+                                category = sub.category,
+                                imageUrl = sub.imageUrl,
+                                status = sub.status,
+                                maxParticipants = sub.maxParticipants
                             )
                         }
                         tvNoMyEvents.visibility = View.GONE
                         rvMyEvents.visibility = View.VISIBLE
                         eventAdapter.updateEvents(initialList)
 
-                        // Atualização assíncrona com os detalhes do evento atualizado no banco
                         val eventsMap = initialList.associateBy { it.id }.toMutableMap()
                         for (sub in subscriberDocs) {
                             val ref = if (sub.creatorId.isNotEmpty()) {
@@ -387,22 +394,24 @@ class ProfileActivity : AppCompatActivity() {
                         rvMyEvents.visibility = View.GONE
                         eventAdapter.updateEvents(emptyList())
                     } else {
-                        // Renderização imediata dos eventos favoritados a partir do objeto Favorite
                         val initialList = favoriteDocs.map { fav ->
                             Event(
                                 id = fav.eventId,
                                 creatorId = fav.creatorId,
                                 title = fav.title,
+                                description = fav.description,
                                 date = fav.date,
                                 location = fav.location,
-                                imageUrl = fav.imageUrl
+                                category = fav.category,
+                                imageUrl = fav.imageUrl,
+                                status = fav.status,
+                                maxParticipants = fav.maxParticipants
                             )
                         }
                         tvNoMyEvents.visibility = View.GONE
                         rvMyEvents.visibility = View.VISIBLE
                         eventAdapter.updateEvents(initialList)
 
-                        // Atualização assíncrona com os detalhes completos do evento
                         val eventsMap = initialList.associateBy { it.id }.toMutableMap()
                         for (fav in favoriteDocs) {
                             val ref = if (fav.creatorId.isNotEmpty()) {
@@ -419,34 +428,6 @@ class ProfileActivity : AppCompatActivity() {
                                 }
                             }
                         }
-                    }
-                }
-            }
-    }
-
-    private fun loadCreatedEvents(userId: String, emptyMessage: String) {
-        myEventsListener?.remove()
-
-        myEventsListener = db.collection("events").document(userId).collection("user_events")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Toast.makeText(this, "Erro ao carregar eventos criados: ${error.message}", Toast.LENGTH_LONG).show()
-                    return@addSnapshotListener
-                }
-
-                if (snapshot != null) {
-                    val myCreatedEvents = snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(Event::class.java)
-                    }
-
-                    if (myCreatedEvents.isEmpty()) {
-                        tvNoMyEvents.text = emptyMessage
-                        tvNoMyEvents.visibility = View.VISIBLE
-                        rvMyEvents.visibility = View.GONE
-                    } else {
-                        tvNoMyEvents.visibility = View.GONE
-                        rvMyEvents.visibility = View.VISIBLE
-                        eventAdapter.updateEvents(myCreatedEvents)
                     }
                 }
             }
@@ -483,9 +464,13 @@ class ProfileActivity : AppCompatActivity() {
                 eventId = event.id,
                 creatorId = event.creatorId,
                 title = event.title,
+                description = event.description,
                 date = event.date,
                 location = event.location,
-                imageUrl = event.imageUrl
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
             )
 
             userSubRef.set(subscriber)
@@ -519,9 +504,13 @@ class ProfileActivity : AppCompatActivity() {
                 eventId = event.id,
                 creatorId = event.creatorId,
                 title = event.title,
+                description = event.description,
                 date = event.date,
                 location = event.location,
-                imageUrl = event.imageUrl
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
             )
 
             userFavRef.set(favoriteObj)

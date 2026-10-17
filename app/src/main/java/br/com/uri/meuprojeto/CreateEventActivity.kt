@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.io.File
@@ -38,6 +39,7 @@ class CreateEventActivity : AppCompatActivity() {
     private lateinit var spinnerEventCategory: Spinner
     private lateinit var etMaxParticipants: EditText
 
+    private lateinit var cardCoverPicker: MaterialCardView
     private lateinit var ivCoverPreview: ImageView
     private lateinit var btnSelectCoverImage: MaterialButton
     private lateinit var tvCoverStatus: TextView
@@ -86,6 +88,7 @@ class CreateEventActivity : AppCompatActivity() {
         spinnerEventCategory = findViewById(R.id.spinnerEventCategory)
         etMaxParticipants = findViewById(R.id.etMaxParticipants)
 
+        cardCoverPicker = findViewById(R.id.cardCoverPicker)
         ivCoverPreview = findViewById(R.id.ivCoverPreview)
         btnSelectCoverImage = findViewById(R.id.btnSelectCoverImage)
         tvCoverStatus = findViewById(R.id.tvCoverStatus)
@@ -98,9 +101,11 @@ class CreateEventActivity : AppCompatActivity() {
         setupCategorySpinner()
         setupNativeDateTimePicker()
 
-        btnSelectCoverImage.setOnClickListener {
+        val openGalleryListener = View.OnClickListener {
             pickGalleryLauncher.launch("image/*")
         }
+        cardCoverPicker.setOnClickListener(openGalleryListener)
+        btnSelectCoverImage.setOnClickListener(openGalleryListener)
 
         btnSaveEvent.setOnClickListener {
             saveEvent()
@@ -175,9 +180,9 @@ class CreateEventActivity : AppCompatActivity() {
 
                 selectedLocalImagePath = targetFile.absolutePath
 
+                ivCoverPreview.visibility = View.VISIBLE
                 Glide.with(this)
                     .load(targetFile)
-                    .placeholder(R.drawable.ic_launcher_background)
                     .into(ivCoverPreview)
 
                 tvCoverStatus.text = "Foto de capa selecionada e salva localmente!"

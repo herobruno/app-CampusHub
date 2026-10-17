@@ -7,8 +7,12 @@ data class Subscriber(
     val eventId: String = "",
     val creatorId: String = "",
     val title: String = "",
+    val description: String = "",
     val date: String = "",
     val location: String = "",
+    val category: String = "",
     val imageUrl: String = "",
+    val status: String = "OPEN",
+    val maxParticipants: Int = 0,
     val createdAt: Long = System.currentTimeMillis()
 )

@@ -403,9 +403,25 @@ class EventDetailActivity : AppCompatActivity() {
         val newStatus = if (event.isEnded) "OPEN" else "ENDED"
         val statusMessage = if (newStatus == "ENDED") "Evento encerrado com sucesso!" else "Evento reaberto com sucesso!"
 
-        getEventRef()
-            .update("status", newStatus)
+        val eventRef = getEventRef()
+        eventRef.update("status", newStatus)
             .addOnSuccessListener {
+                // Sincroniza o novo status com os inscritos do evento na subcoleção do usuário e na subcoleção do evento
+                eventRef.collection("subscribers").get().addOnSuccessListener { snapshot ->
+                    snapshot?.documents?.forEach { doc ->
+                        val subUserId = doc.getString("userId") ?: doc.id
+                        db.collection("users").document(subUserId).collection("subscriptions").document(event.id).update("status", newStatus)
+                        eventRef.collection("subscribers").document(subUserId).update("status", newStatus)
+                    }
+                }
+                // Sincroniza o novo status com os favoritos do evento na subcoleção do usuário e na subcoleção do evento
+                eventRef.collection("favorites").get().addOnSuccessListener { snapshot ->
+                    snapshot?.documents?.forEach { doc ->
+                        val favUserId = doc.getString("userId") ?: doc.id
+                        db.collection("users").document(favUserId).collection("favorites").document(event.id).update("status", newStatus)
+                        eventRef.collection("favorites").document(favUserId).update("status", newStatus)
+                    }
+                }
                 Toast.makeText(this, statusMessage, Toast.LENGTH_SHORT).show()
             }
             .addOnFailureListener { e ->
@@ -996,12 +1012,11 @@ class EventDetailActivity : AppCompatActivity() {
         tvCommentCount.text = event.commentCount.toString()
 
         val isSubscribed = isCurrentUserSubscribed
-
         val isOwner = currentUserId.isNotEmpty() && currentUserId == event.creatorId
 
         if (event.isEnded) {
             tvStatus.text = "Encerrado"
-            tvStatus.setBackgroundColor("#FFD32F2F".toColorInt())
+            tvStatus.setBackgroundResource(R.drawable.bg_badge_ended)
             val labelReviews = if (event.ratingCount == 1) "avaliação" else "avaliações"
             tvRatingAverage.text = String.format(Locale.getDefault(), "★ %.1f (%d %s)", event.averageRating, event.ratingCount, labelReviews)
             tvRatingAverage.visibility = View.VISIBLE
@@ -1016,14 +1031,17 @@ class EventDetailActivity : AppCompatActivity() {
             }
         } else {
             tvStatus.text = "Aberto"
-            tvStatus.setBackgroundColor("#FF388E3C".toColorInt())
+            tvStatus.setBackgroundResource(R.drawable.bg_badge_open)
             tvRatingAverage.visibility = View.GONE
             btnRate.visibility = View.GONE
 
             if (isOwner) {
-                btnSubscribe.visibility = View.GONE
+                btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.text = "Organizador"
+                btnSubscribe.isEnabled = false
             } else {
                 btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.isEnabled = true
                 btnSubscribe.text = if (isSubscribed) "Inscrito" else "Inscrever-se"
             }
         }
@@ -1032,9 +1050,9 @@ class EventDetailActivity : AppCompatActivity() {
         if (isOwner) {
             cardCreatorActions.visibility = View.VISIBLE
             if (event.isEnded) {
-                btnToggleStatus.text = "Reabrir Evento"
+                btnToggleStatus.text = "Reabrir"
             } else {
-                btnToggleStatus.text = "Encerrar Evento"
+                btnToggleStatus.text = "Encerrar"
             }
         } else {
             cardCreatorActions.visibility = View.GONE
@@ -1083,9 +1101,13 @@ class EventDetailActivity : AppCompatActivity() {
                 eventId = event.id,
                 creatorId = event.creatorId,
                 title = event.title,
+                description = event.description,
                 date = event.date,
                 location = event.location,
-                imageUrl = event.imageUrl
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
             )
 
             userSubRef.set(subscriber)
@@ -1117,9 +1139,13 @@ class EventDetailActivity : AppCompatActivity() {
                 eventId = event.id,
                 creatorId = event.creatorId,
                 title = event.title,
+                description = event.description,
                 date = event.date,
                 location = event.location,
-                imageUrl = event.imageUrl
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
             )
 
             userFavRef.set(favoriteObj)

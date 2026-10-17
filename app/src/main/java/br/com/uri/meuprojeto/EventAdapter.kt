@@ -116,7 +116,7 @@ class EventAdapter(
             // Exibição do Status, Média e Botão de Avaliação (no lugar do botão de inscrição)
             if (event.isEnded) {
                 tvEventStatus.text = "Encerrado"
-                tvEventStatus.setBackgroundColor(Color.parseColor("#FFD32F2F"))
+                tvEventStatus.setBackgroundResource(R.drawable.bg_badge_ended)
 
                 val labelReviews = if (event.ratingCount == 1) "avaliação" else "avaliações"
                 tvRatingAverage.text = String.format(Locale.getDefault(), "★ %.1f (%d %s)", event.averageRating, event.ratingCount, labelReviews)
@@ -141,7 +141,7 @@ class EventAdapter(
                 }
             } else {
                 tvEventStatus.text = "Aberto"
-                tvEventStatus.setBackgroundColor(Color.parseColor("#FF388E3C"))
+                tvEventStatus.setBackgroundResource(R.drawable.bg_badge_open)
                 tvRatingAverage.visibility = View.GONE
                 btnRateEvent.visibility = View.GONE
             }
