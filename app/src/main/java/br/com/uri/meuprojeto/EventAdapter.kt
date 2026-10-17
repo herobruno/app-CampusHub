@@ -15,6 +15,8 @@ import java.util.Locale
 class EventAdapter(
     private var events: List<Event>,
     private val currentUserId: String,
+    private var subscribedEventIds: Set<String> = emptySet(),
+    private var favoriteEventIds: Set<String> = emptySet(),
     private val onSubscribeClick: (Event) -> Unit,
     private val onFavoriteClick: ((Event) -> Unit)? = null,
     private val onCommentsClick: ((Event) -> Unit)? = null,
@@ -27,6 +29,16 @@ class EventAdapter(
         notifyDataSetChanged()
     }
 
+    fun updateSubscribedEvents(subscribedIds: Set<String>) {
+        this.subscribedEventIds = subscribedIds
+        notifyDataSetChanged()
+    }
+
+    fun updateFavoriteEvents(favoriteIds: Set<String>) {
+        this.favoriteEventIds = favoriteIds
+        notifyDataSetChanged()
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EventViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_event, parent, false)
         return EventViewHolder(view)
@@ -34,7 +46,7 @@ class EventAdapter(
 
     override fun onBindViewHolder(holder: EventViewHolder, position: Int) {
         val event = events[position]
-        holder.bind(event, currentUserId, onSubscribeClick, onFavoriteClick, onCommentsClick, onRateClick, onEventClick)
+        holder.bind(event, currentUserId, subscribedEventIds, favoriteEventIds, onSubscribeClick, onFavoriteClick, onCommentsClick, onRateClick, onEventClick)
     }
 
     override fun getItemCount(): Int = events.size
@@ -48,6 +60,7 @@ class EventAdapter(
         private val tvEventCategory: TextView = itemView.findViewById(R.id.tvEventCategory)
         private val tvEventStatus: TextView = itemView.findViewById(R.id.tvEventStatus)
         private val tvEventTitle: TextView = itemView.findViewById(R.id.tvEventTitle)
+        private val tvEventCreator: TextView = itemView.findViewById(R.id.tvEventCreator)
         private val tvEventDate: TextView = itemView.findViewById(R.id.tvEventDate)
         private val tvEventLocation: TextView = itemView.findViewById(R.id.tvEventLocation)
         private val tvEventDescription: TextView = itemView.findViewById(R.id.tvEventDescription)
@@ -60,6 +73,8 @@ class EventAdapter(
         fun bind(
             event: Event,
             currentUserId: String,
+            subscribedEventIds: Set<String>,
+            favoriteEventIds: Set<String>,
             onSubscribeClick: (Event) -> Unit,
             onFavoriteClick: ((Event) -> Unit)?,
             onCommentsClick: ((Event) -> Unit)?,
@@ -68,21 +83,34 @@ class EventAdapter(
         ) {
             tvEventCategory.text = event.category
             tvEventTitle.text = event.title
+
+            val creator = if (event.creatorName.isNotEmpty()) event.creatorName else "URI Eventos"
+            tvEventCreator.text = "Criado por: $creator"
+
             tvEventDate.text = event.date
             tvEventLocation.text = event.location
             tvEventDescription.text = event.description
 
-            val subscriberCount = event.subscribers.size
-            tvEventCapacity.text = "$subscriberCount / ${event.maxParticipants} inscritos"
+            tvEventCapacity.text = "${event.subscriberCount} / ${event.maxParticipants} inscritos"
 
             val count = event.commentCount
             tvCommentCount.text = if (count == 1) "1 comentário" else "$count comentários"
 
-            val isSubscribed = event.subscribers.contains(currentUserId)
-            if (isSubscribed) {
+            val isOwner = currentUserId.isNotEmpty() && currentUserId == event.creatorId
+            val isSubscribed = subscribedEventIds.contains(event.id)
+
+            if (isOwner) {
+                btnSubscribe.text = "Organizador"
+                btnSubscribe.isEnabled = false
+                btnSubscribe.visibility = View.VISIBLE
+            } else if (isSubscribed) {
                 btnSubscribe.text = "Inscrito"
+                btnSubscribe.isEnabled = true
+                btnSubscribe.visibility = View.VISIBLE
             } else {
                 btnSubscribe.text = "Inscrever-se"
+                btnSubscribe.isEnabled = true
+                btnSubscribe.visibility = View.VISIBLE
             }
 
             // Exibição do Status, Média e Botão de Avaliação (no lugar do botão de inscrição)
@@ -94,34 +122,31 @@ class EventAdapter(
                 tvRatingAverage.text = String.format(Locale.getDefault(), "★ %.1f (%d %s)", event.averageRating, event.ratingCount, labelReviews)
                 tvRatingAverage.visibility = View.VISIBLE
 
-                // Esconde botão de inscrição e exibe botão de avaliação no mesmo lugar (se o aluno estava inscrito)
-                btnSubscribe.visibility = View.GONE
-
-                if (isSubscribed) {
-                    btnRateEvent.visibility = View.VISIBLE
-                    val userRating = event.ratings[currentUserId]
-                    if (userRating != null) {
-                        btnRateEvent.text = String.format(Locale.getDefault(), "Sua Nota: %.1f ★", userRating)
-                    } else {
-                        btnRateEvent.text = "Avaliar Evento"
-                    }
-
-                    btnRateEvent.setOnClickListener {
-                        onRateClick?.invoke(event)
-                    }
-                } else {
+                if (isOwner) {
+                    btnSubscribe.visibility = View.GONE
                     btnRateEvent.visibility = View.GONE
+                } else {
+                    btnSubscribe.visibility = View.GONE
+
+                    if (isSubscribed) {
+                        btnRateEvent.visibility = View.VISIBLE
+                        btnRateEvent.text = "Avaliar Evento"
+
+                        btnRateEvent.setOnClickListener {
+                            onRateClick?.invoke(event)
+                        }
+                    } else {
+                        btnRateEvent.visibility = View.GONE
+                    }
                 }
             } else {
                 tvEventStatus.text = "Aberto"
                 tvEventStatus.setBackgroundColor(Color.parseColor("#FF388E3C"))
                 tvRatingAverage.visibility = View.GONE
                 btnRateEvent.visibility = View.GONE
-                btnSubscribe.visibility = View.VISIBLE
-                btnSubscribe.isEnabled = true
             }
 
-            val isFavorite = event.favorites.contains(currentUserId)
+            val isFavorite = favoriteEventIds.contains(event.id)
             if (isFavorite) {
                 btnFavorite.setImageResource(R.drawable.ic_heart_filled)
             } else {
@@ -139,7 +164,7 @@ class EventAdapter(
             }
 
             btnSubscribe.setOnClickListener {
-                if (!event.isEnded) {
+                if (!event.isEnded && !isOwner) {
                     onSubscribeClick(event)
                 }
             }

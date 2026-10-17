@@ -21,8 +21,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
@@ -39,9 +39,14 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var etSearchQuery: EditText
     private lateinit var spinnerCategory: Spinner
     private lateinit var spinnerStatus: Spinner
+    private lateinit var fabAddEvent: FloatingActionButton
 
     private lateinit var adapter: EventAdapter
     private var eventsListener: ListenerRegistration? = null
+    private var userSubscriptionsListener: ListenerRegistration? = null
+    private var userSubscribedEventIds: Set<String> = emptySet()
+    private var userFavoritesListener: ListenerRegistration? = null
+    private var userFavoriteEventIds: Set<String> = emptySet()
 
     private var allEvents: List<Event> = emptyList()
     private val categoryList = mutableListOf("Todas", "Tecnologia", "Inteligência Artificial", "Design", "Hackathon", "Backend & Cloud")
@@ -71,6 +76,7 @@ class HomeActivity : AppCompatActivity() {
         etSearchQuery = findViewById(R.id.etSearchQuery)
         spinnerCategory = findViewById(R.id.spinnerCategory)
         spinnerStatus = findViewById(R.id.spinnerStatus)
+        fabAddEvent = findViewById(R.id.fabAddEvent)
 
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
         val btnProfile = findViewById<ImageButton>(R.id.btnProfile)
@@ -81,19 +87,18 @@ class HomeActivity : AppCompatActivity() {
         adapter = EventAdapter(
             events = emptyList(),
             currentUserId = currentUser.uid,
+            subscribedEventIds = userSubscribedEventIds,
+            favoriteEventIds = userFavoriteEventIds,
             onSubscribeClick = { event -> toggleSubscription(event) },
             onFavoriteClick = { event -> toggleFavorite(event) },
-            onCommentsClick = { event -> openCommentsBottomSheet(event.id) },
+            onCommentsClick = { event -> openCommentsBottomSheet(event.id, event.creatorId) },
             onRateClick = { event -> showRatingDialog(event) },
-            onEventClick = { event -> openEventDetail(event.id) },
+            onEventClick = { event -> openEventDetail(event) },
         )
         rvEvents.adapter = adapter
 
         // Configuração dos Filtros (Search & Spinners)
         setupFilters()
-
-        // Popula automaticamente a coleção 'events' no Firestore caso esteja vazia
-        EventSeeder.seedEventsIfEmpty()
 
         btnMenu.setOnClickListener { view ->
             val popup = PopupMenu(this, view)
@@ -119,8 +124,35 @@ class HomeActivity : AppCompatActivity() {
             finish()
         }
 
-        // Carrega eventos em tempo real do Firestore
+        fabAddEvent.setOnClickListener {
+            startActivity(Intent(this, CreateEventActivity::class.java))
+        }
+
+        loadUserSubscriptionsRealtime()
+        loadUserFavoritesRealtime()
         loadEventsRealtime()
+    }
+
+    private fun loadUserSubscriptionsRealtime() {
+        val userId = auth.currentUser?.uid ?: return
+        userSubscriptionsListener = db.collection("users").document(userId).collection("subscriptions")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    userSubscribedEventIds = snapshot.documents.map { it.id }.toSet()
+                    adapter.updateSubscribedEvents(userSubscribedEventIds)
+                }
+            }
+    }
+
+    private fun loadUserFavoritesRealtime() {
+        val userId = auth.currentUser?.uid ?: return
+        userFavoritesListener = db.collection("users").document(userId).collection("favorites")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    userFavoriteEventIds = snapshot.documents.map { it.id }.toSet()
+                    adapter.updateFavoriteEvents(userFavoriteEventIds)
+                }
+            }
     }
 
     private fun setupFilters() {
@@ -214,20 +246,25 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun openCommentsBottomSheet(eventId: String) {
-        val fragment = CommentsBottomSheetFragment.newInstance(eventId)
+    private fun openCommentsBottomSheet(eventId: String, creatorId: String) {
+        val fragment = CommentsBottomSheetFragment.newInstance(eventId, creatorId)
         fragment.show(supportFragmentManager, "CommentsBottomSheetFragment")
     }
 
-    private fun openEventDetail(eventId: String) {
+    private fun openEventDetail(event: Event) {
         val intent = Intent(this, EventDetailActivity::class.java).apply {
-            putExtra("EXTRA_EVENT_ID", eventId)
+            putExtra("EXTRA_EVENT_ID", event.id)
+            putExtra("EXTRA_CREATOR_ID", event.creatorId)
         }
         startActivity(intent)
     }
 
+    private fun getEventRef(event: Event) =
+        db.collection("events").document(event.creatorId).collection("user_events").document(event.id)
+
     private fun showRatingDialog(event: Event) {
-        val userId = auth.currentUser?.uid ?: return
+        val user = auth.currentUser ?: return
+        val userId = user.uid
 
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Avaliar Evento")
@@ -236,8 +273,7 @@ class HomeActivity : AppCompatActivity() {
         val ratingBar = RatingBar(this).apply {
             numStars = 5
             stepSize = 1.0f
-            val previousRating = event.ratings[userId] ?: 5.0
-            rating = previousRating.toFloat()
+            rating = 5.0f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -262,15 +298,34 @@ class HomeActivity : AppCompatActivity() {
                 return@setPositiveButton
             }
 
-            db.collection("events")
-                .document(event.id)
-                .update("ratings.$userId", score)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Avaliação salva com sucesso!", Toast.LENGTH_SHORT).show()
+            val eventRef = getEventRef(event)
+            val ratingRef = eventRef.collection("ratings").document(userId)
+
+            val ratingObj = Rating(
+                id = userId,
+                userId = userId,
+                rating = score,
+                eventId = event.id,
+                creatorId = event.creatorId
+            )
+
+            ratingRef.set(ratingObj).addOnSuccessListener {
+                eventRef.collection("ratings").get().addOnSuccessListener { ratingsSnapshot ->
+                    if (ratingsSnapshot != null && !ratingsSnapshot.isEmpty) {
+                        val scores = ratingsSnapshot.documents.mapNotNull { it.getDouble("rating") }
+                        val totalCount = scores.size
+                        val avg = if (totalCount > 0) scores.sum() / totalCount else 0.0
+
+                        eventRef.update(
+                            mapOf(
+                                "averageRating" to avg,
+                                "ratingCount" to totalCount
+                            )
+                        )
+                    }
                 }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao salvar avaliação: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+                Toast.makeText(this, "Avaliação salva com sucesso!", Toast.LENGTH_SHORT).show()
+            }
             dialog.dismiss()
         }
 
@@ -284,7 +339,7 @@ class HomeActivity : AppCompatActivity() {
     private fun loadEventsRealtime() {
         progressBar.visibility = View.VISIBLE
 
-        eventsListener = db.collection("events")
+        eventsListener = db.collectionGroup("user_events")
             .addSnapshotListener { snapshot, error ->
                 progressBar.visibility = View.GONE
 
@@ -306,60 +361,101 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun toggleSubscription(event: Event) {
-        val userId = auth.currentUser?.uid ?: return
-        val eventRef = db.collection("events").document(event.id)
+        val user = auth.currentUser ?: return
+        val userId = user.uid
 
-        val isSubscribed = event.subscribers.contains(userId)
+        if (userId == event.creatorId) {
+            Toast.makeText(this, "Você é o organizador deste evento!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val eventRef = getEventRef(event)
+
+        val userSubRef = db.collection("users").document(userId).collection("subscriptions").document(event.id)
+        val eventSubRef = eventRef.collection("subscribers").document(userId)
+
+        val isSubscribed = userSubscribedEventIds.contains(event.id)
 
         if (isSubscribed) {
-            // Cancelar inscrição
-            eventRef.update("subscribers", FieldValue.arrayRemove(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Inscrição cancelada com sucesso!", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao cancelar inscrição: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            userSubRef.delete()
+            eventSubRef.delete().addOnSuccessListener {
+                syncSubscriberCount(eventRef)
+                Toast.makeText(this, "Inscrição cancelada com sucesso!", Toast.LENGTH_SHORT).show()
+            }
         } else {
-            // Verificar limite de participantes
-            if (event.subscribers.size >= event.maxParticipants && event.maxParticipants > 0) {
+            if (event.subscriberCount >= event.maxParticipants && event.maxParticipants > 0) {
                 Toast.makeText(this, "Desculpe, este evento já atingiu o limite de vagas!", Toast.LENGTH_SHORT).show()
                 return
             }
 
-            // Inscrever-se
-            eventRef.update("subscribers", FieldValue.arrayUnion(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Inscrição realizada com sucesso!", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao realizar inscrição: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+            val subscriber = Subscriber(
+                id = userId,
+                userId = userId,
+                userName = userName,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                date = event.date,
+                location = event.location,
+                imageUrl = event.imageUrl
+            )
+
+            userSubRef.set(subscriber)
+            eventSubRef.set(subscriber).addOnSuccessListener {
+                syncSubscriberCount(eventRef)
+                Toast.makeText(this, "Inscrição realizada com sucesso!", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     private fun toggleFavorite(event: Event) {
-        val userId = auth.currentUser?.uid ?: return
-        val eventRef = db.collection("events").document(event.id)
+        val user = auth.currentUser ?: return
+        val userId = user.uid
+        val eventRef = getEventRef(event)
 
-        val isFavorite = event.favorites.contains(userId)
+        val userFavRef = db.collection("users").document(userId).collection("favorites").document(event.id)
+        val eventFavRef = eventRef.collection("favorites").document(userId)
+
+        val isFavorite = userFavoriteEventIds.contains(event.id)
 
         if (isFavorite) {
-            eventRef.update("favorites", FieldValue.arrayRemove(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Removido dos favoritos", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao desfavoritar: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            userFavRef.delete()
+            eventFavRef.delete().addOnSuccessListener {
+                syncFavoriteCount(eventRef)
+                Toast.makeText(this, "Removido dos favoritos", Toast.LENGTH_SHORT).show()
+            }
         } else {
-            eventRef.update("favorites", FieldValue.arrayUnion(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Adicionado aos favoritos!", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao favoritar: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            val favoriteObj = Favorite(
+                id = userId,
+                userId = userId,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                date = event.date,
+                location = event.location,
+                imageUrl = event.imageUrl
+            )
+
+            userFavRef.set(favoriteObj)
+            eventFavRef.set(favoriteObj).addOnSuccessListener {
+                syncFavoriteCount(eventRef)
+                Toast.makeText(this, "Adicionado aos favoritos!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun syncSubscriberCount(eventRef: com.google.firebase.firestore.DocumentReference) {
+        eventRef.collection("subscribers").get().addOnSuccessListener { snapshot ->
+            val count = snapshot?.size() ?: 0
+            eventRef.update("subscriberCount", count)
+        }
+    }
+
+    private fun syncFavoriteCount(eventRef: com.google.firebase.firestore.DocumentReference) {
+        eventRef.collection("favorites").get().addOnSuccessListener { snapshot ->
+            val count = snapshot?.size() ?: 0
+            eventRef.update("favoriteCount", count)
         }
     }
 
@@ -371,6 +467,8 @@ class HomeActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         eventsListener?.remove()
+        userSubscriptionsListener?.remove()
+        userFavoritesListener?.remove()
     }
 
     private fun updateWelcomeMessage() {

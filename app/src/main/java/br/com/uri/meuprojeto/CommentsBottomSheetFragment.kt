@@ -24,6 +24,7 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
     private lateinit var db: FirebaseFirestore
 
     private var eventId: String = ""
+    private var creatorId: String = ""
     private var commentsListener: ListenerRegistration? = null
 
     private lateinit var rvComments: RecyclerView
@@ -37,11 +38,13 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
 
     companion object {
         private const val ARG_EVENT_ID = "arg_event_id"
+        private const val ARG_CREATOR_ID = "arg_creator_id"
 
-        fun newInstance(eventId: String): CommentsBottomSheetFragment {
+        fun newInstance(eventId: String, creatorId: String = ""): CommentsBottomSheetFragment {
             val fragment = CommentsBottomSheetFragment()
             val args = Bundle()
             args.putString(ARG_EVENT_ID, eventId)
+            args.putString(ARG_CREATOR_ID, creatorId)
             fragment.arguments = args
             return fragment
         }
@@ -50,8 +53,15 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         eventId = arguments?.getString(ARG_EVENT_ID) ?: ""
+        creatorId = arguments?.getString(ARG_CREATOR_ID) ?: ""
         auth = FirebaseAuth.getInstance()
         db = FirebaseFirestore.getInstance()
+    }
+
+    private fun getEventRef() = if (creatorId.isNotEmpty()) {
+        db.collection("events").document(creatorId).collection("user_events").document(eventId)
+    } else {
+        db.collection("events").document(eventId)
     }
 
     override fun onCreateView(
@@ -108,8 +118,7 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
     private fun loadCommentsRealtime() {
         commentsProgressBar.visibility = View.VISIBLE
 
-        commentsListener = db.collection("events")
-            .document(eventId)
+        commentsListener = getEventRef()
             .collection("comments")
             .orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
@@ -126,7 +135,7 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
                     }
 
                     // Sincroniza a contagem exata dos comentários diretamente com o total de documentos
-                    db.collection("events").document(eventId).update("commentCount", commentsList.size)
+                    getEventRef().update("commentCount", commentsList.size)
 
                     if (commentsList.isEmpty()) {
                         tvNoComments.visibility = View.VISIBLE
@@ -143,7 +152,7 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
     private fun createComment(userId: String, userName: String, text: String) {
         btnSendComment.isEnabled = false
 
-        val commentsRef = db.collection("events").document(eventId).collection("comments")
+        val commentsRef = getEventRef().collection("comments")
         val commentId = commentsRef.document().id
 
         val newComment = Comment(
@@ -177,8 +186,7 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
     private fun updateCommentText(comment: Comment, newText: String) {
         btnSendComment.isEnabled = false
 
-        db.collection("events")
-            .document(eventId)
+        getEventRef()
             .collection("comments")
             .document(comment.id)
             .update("text", newText)
@@ -207,8 +215,7 @@ class CommentsBottomSheetFragment : BottomSheetDialogFragment() {
     }
 
     private fun deleteComment(comment: Comment) {
-        db.collection("events")
-            .document(eventId)
+        getEventRef()
             .collection("comments")
             .document(comment.id)
             .delete()

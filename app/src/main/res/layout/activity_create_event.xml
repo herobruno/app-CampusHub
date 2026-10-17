@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/gray_light"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <!-- Header / Top Bar -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="?attr/colorPrimary"
+        android:paddingHorizontal="16dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Voltar"
+            app:srcCompat="@drawable/ic_back"
+            app:tint="?attr/colorOnPrimary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:text="Cadastrar Novo Evento"
+            android:textColor="?attr/colorOnPrimary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+    </RelativeLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Informações do Evento"
+                        android:textColor="@color/black"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="20dp"
+                        android:text="Preencha os dados abaixo para publicar o evento na plataforma."
+                        android:textColor="@color/gray_text"
+                        android:textSize="13sp" />
+
+                    <!-- Título -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Título do Evento *"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/etEventTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/bg_filter_field"
+                        android:hint="Ex: Workshop de Kotlin Mobile"
+                        android:inputType="textCapSentences"
+                        android:paddingHorizontal="14dp"
+                        android:textColor="@color/black"
+                        android:textColorHint="@color/gray_text"
+                        android:textSize="14sp" />
+
+                    <!-- Descrição -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Descrição Completa *"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/etEventDescription"
+                        android:layout_width="match_parent"
+                        android:layout_height="100dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/bg_filter_field"
+                        android:gravity="top|start"
+                        android:hint="Descreva os tópicos do evento, público-alvo e conteúdo..."
+                        android:inputType="textMultiLine"
+                        android:padding="12dp"
+                        android:textColor="@color/black"
+                        android:textColorHint="@color/gray_text"
+                        android:textSize="14sp" />
+
+                    <!-- Data e Hora Nativos (Seletor Nativo) -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Data e Horário (Clique para Alterar) *"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/etEventDate"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/bg_filter_field"
+                        android:clickable="true"
+                        android:drawableEnd="@android:drawable/ic_menu_my_calendar"
+                        android:drawableTint="@color/primary_blue"
+                        android:focusable="false"
+                        android:hint="Selecione a data e horário"
+                        android:paddingHorizontal="14dp"
+                        android:textColor="@color/black"
+                        android:textColorHint="@color/gray_text"
+                        android:textSize="14sp" />
+
+                    <!-- Localização -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Localização / Endereço *"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/etEventLocation"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/bg_filter_field"
+                        android:hint="Ex: Auditório Central - Bloco A (URI)"
+                        android:inputType="textCapSentences"
+                        android:paddingHorizontal="14dp"
+                        android:textColor="@color/black"
+                        android:textColorHint="@color/gray_text"
+                        android:textSize="14sp" />
+
+                    <!-- Categoria e Vagas Máximas lado a lado -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Categoria *"
+                                android:textColor="@color/primary_dark"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <FrameLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:layout_marginTop="6dp"
+                                android:background="@drawable/bg_filter_field">
+
+                                <Spinner
+                                    android:id="@+id/spinnerEventCategory"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:background="@null"
+                                    android:popupBackground="@drawable/bg_spinner_popup"
+                                    android:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+                                    android:spinnerMode="dropdown" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="end|center_vertical"
+                                    android:layout_marginEnd="8dp"
+                                    android:importantForAccessibility="no"
+                                    app:srcCompat="@drawable/ic_arrow_drop_down"
+                                    app:tint="@color/primary_blue" />
+                            </FrameLayout>
+
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Limite Vagas *"
+                                android:textColor="@color/primary_dark"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <EditText
+                                android:id="@+id/etMaxParticipants"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:layout_marginTop="6dp"
+                                android:background="@drawable/bg_filter_field"
+                                android:hint="Ex: 50"
+                                android:inputType="number"
+                                android:paddingHorizontal="14dp"
+                                android:textColor="@color/black"
+                                android:textColorHint="@color/gray_text"
+                                android:textSize="14sp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    <!-- Foto de Capa (Galeria - Armazenada Apenas Localmente) -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Foto de Capa (Galeria Local)"
+                        android:textColor="@color/primary_dark"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="24dp"
+                        android:gravity="center_vertical"
+                        android:orientation="vertical">
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="160dp"
+                            android:layout_marginBottom="10dp"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="1dp"
+                            app:strokeColor="@color/gray_text"
+                            app:strokeWidth="1dp">
+
+                            <ImageView
+                                android:id="@+id/ivCoverPreview"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:contentDescription="Pré-visualização da Capa"
+                                android:scaleType="centerCrop"
+                                android:src="@drawable/ic_launcher_background" />
+
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSelectCoverImage"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:text="Escolher Foto da Galeria"
+                            android:textColor="@color/primary_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="10dp"
+                            app:strokeColor="@color/primary_blue" />
+
+                        <TextView
+                            android:id="@+id/tvCoverStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="Nenhuma foto da galeria selecionada (usando padrão)."
+                            android:textColor="@color/gray_text"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+
+                    <!-- Botão Publicar Evento -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSaveEvent"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:text="Publicar Evento"
+                        android:textAllCaps="false"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="12dp" />
+
+                    <ProgressBar
+                        android:id="@+id/pbSaveEvent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_marginTop="12dp"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+
+    </ScrollView>
+
+</LinearLayout>

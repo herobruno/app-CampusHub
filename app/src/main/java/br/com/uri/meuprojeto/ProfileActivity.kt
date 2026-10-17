@@ -1,5 +1,6 @@
 package br.com.uri.meuprojeto
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -31,7 +32,12 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var tvNoMyEvents: TextView
     private lateinit var tabLayoutProfile: TabLayout
     private lateinit var eventAdapter: EventAdapter
+
     private var myEventsListener: ListenerRegistration? = null
+    private var userSubscriptionsListener: ListenerRegistration? = null
+    private var userSubscribedEventIds: Set<String> = emptySet()
+    private var userFavoritesListener: ListenerRegistration? = null
+    private var userFavoriteEventIds: Set<String> = emptySet()
 
     private lateinit var tvProfileHeaderName: TextView
     private lateinit var tvProfileHeaderEmail: TextView
@@ -74,10 +80,13 @@ class ProfileActivity : AppCompatActivity() {
         eventAdapter = EventAdapter(
             events = emptyList(),
             currentUserId = user.uid,
+            subscribedEventIds = userSubscribedEventIds,
+            favoriteEventIds = userFavoriteEventIds,
             onSubscribeClick = { event -> toggleSubscription(event) },
             onFavoriteClick = { event -> toggleFavorite(event) },
-            onCommentsClick = { event -> openCommentsBottomSheet(event.id) },
+            onCommentsClick = { event -> openCommentsBottomSheet(event.id, event.creatorId) },
             onRateClick = { event -> showRatingDialog(event) },
+            onEventClick = { event -> openEventDetail(event) }
         )
         rvMyEvents.adapter = eventAdapter
 
@@ -153,30 +162,74 @@ class ProfileActivity : AppCompatActivity() {
                 }
         }
 
-        // Configuração das Abas (Inscrições vs Favoritos)
+        // Configuração das Abas (Inscrições vs Favoritos vs Criados por Mim)
         tabLayoutProfile.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
-                when (tab?.position) {
-                    0 -> loadEventsByField("subscribers", user.uid, "Você ainda não está inscrito em nenhum evento.")
-                    1 -> loadEventsByField("favorites", user.uid, "Você ainda não possui eventos favoritados.")
-                }
+                refreshActiveTab()
             }
 
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab?) {}
+            override fun onTabReselected(tab: TabLayout.Tab?) {
+                refreshActiveTab()
+            }
         })
 
-        // Carrega inicialmente os eventos inscritos
-        loadEventsByField("subscribers", user.uid, "Você ainda não está inscrito em nenhum evento.")
+        loadUserSubscriptionsRealtime()
+        loadUserFavoritesRealtime()
+        refreshActiveTab()
     }
 
-    private fun openCommentsBottomSheet(eventId: String) {
-        val fragment = CommentsBottomSheetFragment.newInstance(eventId)
+    private fun loadUserSubscriptionsRealtime() {
+        val userId = auth.currentUser?.uid ?: return
+        userSubscriptionsListener = db.collection("users").document(userId).collection("subscriptions")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    userSubscribedEventIds = snapshot.documents.map { it.id }.toSet()
+                    eventAdapter.updateSubscribedEvents(userSubscribedEventIds)
+                }
+            }
+    }
+
+    private fun loadUserFavoritesRealtime() {
+        val userId = auth.currentUser?.uid ?: return
+        userFavoritesListener = db.collection("users").document(userId).collection("favorites")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    userFavoriteEventIds = snapshot.documents.map { it.id }.toSet()
+                    eventAdapter.updateFavoriteEvents(userFavoriteEventIds)
+                }
+            }
+    }
+
+    private fun refreshActiveTab() {
+        val user = auth.currentUser ?: return
+        when (tabLayoutProfile.selectedTabPosition) {
+            0 -> loadSubscribedEvents(user.uid, "Você ainda não está inscrito em nenhum evento.")
+            1 -> loadFavoriteEvents(user.uid, "Você ainda não possui eventos favoritados.")
+            2 -> loadCreatedEvents(user.uid, "Você ainda não criou nenhum evento.")
+            else -> loadSubscribedEvents(user.uid, "Você ainda não está inscrito em nenhum evento.")
+        }
+    }
+
+    private fun openCommentsBottomSheet(eventId: String, creatorId: String) {
+        val fragment = CommentsBottomSheetFragment.newInstance(eventId, creatorId)
         fragment.show(supportFragmentManager, "CommentsBottomSheetFragment")
     }
 
+    private fun openEventDetail(event: Event) {
+        val intent = Intent(this, EventDetailActivity::class.java).apply {
+            putExtra("EXTRA_EVENT_ID", event.id)
+            putExtra("EXTRA_CREATOR_ID", event.creatorId)
+        }
+        startActivity(intent)
+    }
+
+    private fun getEventRef(event: Event) =
+        db.collection("events").document(event.creatorId).collection("user_events").document(event.id)
+
     private fun showRatingDialog(event: Event) {
-        val userId = auth.currentUser?.uid ?: return
+        val user = auth.currentUser ?: return
+        val userId = user.uid
 
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Avaliar Evento")
@@ -185,8 +238,7 @@ class ProfileActivity : AppCompatActivity() {
         val ratingBar = RatingBar(this).apply {
             numStars = 5
             stepSize = 1.0f
-            val previousRating = event.ratings[userId] ?: 5.0
-            rating = previousRating.toFloat()
+            rating = 5.0f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -211,15 +263,34 @@ class ProfileActivity : AppCompatActivity() {
                 return@setPositiveButton
             }
 
-            db.collection("events")
-                .document(event.id)
-                .update("ratings.$userId", score)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Avaliação salva com sucesso!", Toast.LENGTH_SHORT).show()
+            val eventRef = getEventRef(event)
+            val ratingRef = eventRef.collection("ratings").document(userId)
+
+            val ratingObj = Rating(
+                id = userId,
+                userId = userId,
+                rating = score,
+                eventId = event.id,
+                creatorId = event.creatorId
+            )
+
+            ratingRef.set(ratingObj).addOnSuccessListener {
+                eventRef.collection("ratings").get().addOnSuccessListener { ratingsSnapshot ->
+                    if (ratingsSnapshot != null && !ratingsSnapshot.isEmpty) {
+                        val scores = ratingsSnapshot.documents.mapNotNull { it.getDouble("rating") }
+                        val totalCount = scores.size
+                        val avg = if (totalCount > 0) scores.sum() / totalCount else 0.0
+
+                        eventRef.update(
+                            mapOf(
+                                "averageRating" to avg,
+                                "ratingCount" to totalCount
+                            )
+                        )
+                    }
                 }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao salvar avaliação: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+                Toast.makeText(this, "Avaliação salva com sucesso!", Toast.LENGTH_SHORT).show()
+            }
             dialog.dismiss()
         }
 
@@ -237,89 +308,253 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadEventsByField(fieldName: String, userId: String, emptyMessage: String) {
+    private fun loadSubscribedEvents(userId: String, emptyMessage: String) {
         myEventsListener?.remove()
 
-        myEventsListener = db.collection("events")
-            .whereArrayContains(fieldName, userId)
+        myEventsListener = db.collection("users").document(userId).collection("subscriptions")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Toast.makeText(this, "Erro ao carregar seus eventos: ${error.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Erro ao carregar suas inscrições: ${error.message}", Toast.LENGTH_LONG).show()
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
-                    val myEvents = snapshot.documents.mapNotNull { doc ->
+                    val subscriberDocs = snapshot.documents.mapNotNull { doc ->
+                        doc.toObject(Subscriber::class.java)
+                    }
+
+                    if (subscriberDocs.isEmpty()) {
+                        tvNoMyEvents.text = emptyMessage
+                        tvNoMyEvents.visibility = View.VISIBLE
+                        rvMyEvents.visibility = View.GONE
+                        eventAdapter.updateEvents(emptyList())
+                    } else {
+                        // Renderização imediata dos eventos a partir dos dados do Subscriber
+                        val initialList = subscriberDocs.map { sub ->
+                            Event(
+                                id = sub.eventId,
+                                creatorId = sub.creatorId,
+                                title = sub.title,
+                                date = sub.date,
+                                location = sub.location,
+                                imageUrl = sub.imageUrl
+                            )
+                        }
+                        tvNoMyEvents.visibility = View.GONE
+                        rvMyEvents.visibility = View.VISIBLE
+                        eventAdapter.updateEvents(initialList)
+
+                        // Atualização assíncrona com os detalhes do evento atualizado no banco
+                        val eventsMap = initialList.associateBy { it.id }.toMutableMap()
+                        for (sub in subscriberDocs) {
+                            val ref = if (sub.creatorId.isNotEmpty()) {
+                                db.collection("events").document(sub.creatorId).collection("user_events").document(sub.eventId)
+                            } else {
+                                db.collection("events").document(sub.eventId)
+                            }
+                            ref.get().addOnSuccessListener { eventDoc ->
+                                if (eventDoc != null && eventDoc.exists()) {
+                                    eventDoc.toObject(Event::class.java)?.let { freshEvent ->
+                                        eventsMap[freshEvent.id] = freshEvent
+                                        eventAdapter.updateEvents(eventsMap.values.toList())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+    }
+
+    private fun loadFavoriteEvents(userId: String, emptyMessage: String) {
+        myEventsListener?.remove()
+
+        myEventsListener = db.collection("users").document(userId).collection("favorites")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Toast.makeText(this, "Erro ao carregar favoritos: ${error.message}", Toast.LENGTH_LONG).show()
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val favoriteDocs = snapshot.documents.mapNotNull { doc ->
+                        doc.toObject(Favorite::class.java)
+                    }
+
+                    if (favoriteDocs.isEmpty()) {
+                        tvNoMyEvents.text = emptyMessage
+                        tvNoMyEvents.visibility = View.VISIBLE
+                        rvMyEvents.visibility = View.GONE
+                        eventAdapter.updateEvents(emptyList())
+                    } else {
+                        // Renderização imediata dos eventos favoritados a partir do objeto Favorite
+                        val initialList = favoriteDocs.map { fav ->
+                            Event(
+                                id = fav.eventId,
+                                creatorId = fav.creatorId,
+                                title = fav.title,
+                                date = fav.date,
+                                location = fav.location,
+                                imageUrl = fav.imageUrl
+                            )
+                        }
+                        tvNoMyEvents.visibility = View.GONE
+                        rvMyEvents.visibility = View.VISIBLE
+                        eventAdapter.updateEvents(initialList)
+
+                        // Atualização assíncrona com os detalhes completos do evento
+                        val eventsMap = initialList.associateBy { it.id }.toMutableMap()
+                        for (fav in favoriteDocs) {
+                            val ref = if (fav.creatorId.isNotEmpty()) {
+                                db.collection("events").document(fav.creatorId).collection("user_events").document(fav.eventId)
+                            } else {
+                                db.collection("events").document(fav.eventId)
+                            }
+                            ref.get().addOnSuccessListener { eventDoc ->
+                                if (eventDoc != null && eventDoc.exists()) {
+                                    eventDoc.toObject(Event::class.java)?.let { freshEvent ->
+                                        eventsMap[freshEvent.id] = freshEvent
+                                        eventAdapter.updateEvents(eventsMap.values.toList())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+    }
+
+    private fun loadCreatedEvents(userId: String, emptyMessage: String) {
+        myEventsListener?.remove()
+
+        myEventsListener = db.collection("events").document(userId).collection("user_events")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Toast.makeText(this, "Erro ao carregar eventos criados: ${error.message}", Toast.LENGTH_LONG).show()
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val myCreatedEvents = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Event::class.java)
                     }
 
-                    if (myEvents.isEmpty()) {
+                    if (myCreatedEvents.isEmpty()) {
                         tvNoMyEvents.text = emptyMessage
                         tvNoMyEvents.visibility = View.VISIBLE
                         rvMyEvents.visibility = View.GONE
                     } else {
                         tvNoMyEvents.visibility = View.GONE
                         rvMyEvents.visibility = View.VISIBLE
-                        eventAdapter.updateEvents(myEvents)
+                        eventAdapter.updateEvents(myCreatedEvents)
                     }
                 }
             }
     }
 
     private fun toggleSubscription(event: Event) {
-        val userId = auth.currentUser?.uid ?: return
-        val eventRef = db.collection("events").document(event.id)
+        val user = auth.currentUser ?: return
+        val userId = user.uid
 
-        val isSubscribed = event.subscribers.contains(userId)
+        if (userId == event.creatorId) {
+            Toast.makeText(this, "Você é o organizador deste evento!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val eventRef = getEventRef(event)
+
+        val userSubRef = db.collection("users").document(userId).collection("subscriptions").document(event.id)
+        val eventSubRef = eventRef.collection("subscribers").document(userId)
+
+        val isSubscribed = userSubscribedEventIds.contains(event.id)
 
         if (isSubscribed) {
-            // Cancelar inscrição
-            eventRef.update("subscribers", FieldValue.arrayRemove(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Inscrição cancelada com sucesso!", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao cancelar inscrição: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            userSubRef.delete()
+            eventSubRef.delete().addOnSuccessListener {
+                syncSubscriberCount(eventRef)
+                Toast.makeText(this, "Inscrição cancelada com sucesso!", Toast.LENGTH_SHORT).show()
+            }
         } else {
-            // Inscrever-se
-            eventRef.update("subscribers", FieldValue.arrayUnion(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Inscrição realizada com sucesso!", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao realizar inscrição: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+            val subscriber = Subscriber(
+                id = userId,
+                userId = userId,
+                userName = userName,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                date = event.date,
+                location = event.location,
+                imageUrl = event.imageUrl
+            )
+
+            userSubRef.set(subscriber)
+            eventSubRef.set(subscriber).addOnSuccessListener {
+                syncSubscriberCount(eventRef)
+                Toast.makeText(this, "Inscrição realizada com sucesso!", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     private fun toggleFavorite(event: Event) {
-        val userId = auth.currentUser?.uid ?: return
-        val eventRef = db.collection("events").document(event.id)
+        val user = auth.currentUser ?: return
+        val userId = user.uid
+        val eventRef = getEventRef(event)
 
-        val isFavorite = event.favorites.contains(userId)
+        val userFavRef = db.collection("users").document(userId).collection("favorites").document(event.id)
+        val eventFavRef = eventRef.collection("favorites").document(userId)
+
+        val isFavorite = userFavoriteEventIds.contains(event.id)
 
         if (isFavorite) {
-            eventRef.update("favorites", FieldValue.arrayRemove(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Removido dos favoritos", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao desfavoritar: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            userFavRef.delete()
+            eventFavRef.delete().addOnSuccessListener {
+                syncFavoriteCount(eventRef)
+                Toast.makeText(this, "Removido dos favoritos", Toast.LENGTH_SHORT).show()
+            }
         } else {
-            eventRef.update("favorites", FieldValue.arrayUnion(userId))
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Adicionado aos favoritos!", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Erro ao favoritar: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+            val favoriteObj = Favorite(
+                id = userId,
+                userId = userId,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                date = event.date,
+                location = event.location,
+                imageUrl = event.imageUrl
+            )
+
+            userFavRef.set(favoriteObj)
+            eventFavRef.set(favoriteObj).addOnSuccessListener {
+                syncFavoriteCount(eventRef)
+                Toast.makeText(this, "Adicionado aos favoritos!", Toast.LENGTH_SHORT).show()
+            }
         }
+    }
+
+    private fun syncSubscriberCount(eventRef: com.google.firebase.firestore.DocumentReference) {
+        eventRef.collection("subscribers").get().addOnSuccessListener { snapshot ->
+            val count = snapshot?.size() ?: 0
+            eventRef.update("subscriberCount", count)
+        }
+    }
+
+    private fun syncFavoriteCount(eventRef: com.google.firebase.firestore.DocumentReference) {
+        eventRef.collection("favorites").get().addOnSuccessListener { snapshot ->
+            val count = snapshot?.size() ?: 0
+            eventRef.update("favoriteCount", count)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshActiveTab()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         myEventsListener?.remove()
+        userSubscriptionsListener?.remove()
+        userFavoritesListener?.remove()
     }
 }
