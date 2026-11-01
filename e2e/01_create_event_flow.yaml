@@ -1,0 +1,52 @@
+# ==============================================================================
+# Teste E2E 01: Criação e Validação de Formulário de Eventos
+# ==============================================================================
+# Descrição: Testa a autenticação, navegação para CreateEventActivity,
+#            preenchimento do formulário e publicação no Firestore.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Navegação para a Tela de Cadastro de Eventos
+- assertVisible:
+    id: "fabAddEvent"
+- tapOn:
+    id: "fabAddEvent"
+
+# 3. Preenchimento do Formulário
+- tapOn:
+    id: "etEventTitle"
+- inputText: "Workshop de Testes E2E com Maestro"
+
+- tapOn:
+    id: "etEventDescription"
+- inputText: "Treinamento avançado sobre testes automatizados no Android e integração contínua."
+
+- tapOn:
+    id: "etEventLocation"
+- inputText: "Laboratório 3 - Bloco B (URI)"
+
+- tapOn:
+    id: "etMaxParticipants"
+- inputText: "45"
+
+- hideKeyboard
+
+# 4. Rola para exibir o botão de publicação no final da página
+- scroll
+
+- assertVisible:
+    id: "btnSaveEvent"
+
+- tapOn:
+    id: "btnSaveEvent"
+
+# 5. Validação de Retorno à Home com Sucesso
+- assertVisible:
+    id: "fabAddEvent"

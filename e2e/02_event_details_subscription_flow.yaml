@@ -1,0 +1,38 @@
+# ==============================================================================
+# Teste E2E 02: Visualização de Detalhes do Evento e Navegação
+# ==============================================================================
+# Descrição: Seleciona o primeiro evento disponível na lista da Home, abre a
+#            tela de detalhes (EventDetailActivity), valida os campos e retorna.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Validação da Lista de Eventos na Home
+- assertVisible:
+    id: "rvEvents"
+
+# 3. Clica no título do primeiro evento da lista (tvEventTitle no card)
+- tapOn:
+    id: "tvEventTitle"
+    index: 0
+
+# 4. Validação dos Componentes na Tela de Detalhes (EventDetailActivity)
+- assertVisible:
+    id: "tvTitle"
+- assertVisible:
+    id: "tvCapacity"
+- assertVisible:
+    id: "tvLocation"
+
+# 5. Retorno para a Home
+- tapOn:
+    id: "btnBack"
+
+- assertVisible:
+    id: "fabAddEvent"
