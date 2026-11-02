@@ -1,0 +1,46 @@
+# ==============================================================================
+# Teste de Integração 03: Edição e Atualização do Nome de Perfil
+# ==============================================================================
+# Descrição: Navega até ProfileActivity, abre o card de edição, rola para exibir
+#            os campos, altera o nome de exibição do usuário e salva a atualização.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Navegação para a Tela de Perfil
+- assertVisible:
+    id: "btnProfile"
+- tapOn:
+    id: "btnProfile"
+
+# 3. Abertura do Card de Edição de Perfil
+- assertVisible:
+    id: "btnToggleEdit"
+- tapOn:
+    id: "btnToggleEdit"
+
+# 4. Rola a tela para baixo para exibir o card de edição que se expandiu
+- scroll
+
+# 5. Limpeza do texto existente e inserção do novo nome de exibição
+- assertVisible:
+    id: "etProfileName"
+- tapOn:
+    id: "etProfileName"
+- eraseText: 50
+- inputText: "Usuário Teste Maestro"
+
+- hideKeyboard
+
+- tapOn:
+    id: "btnSaveProfile"
+
+# 6. Validação da presença do elemento de cabeçalho do perfil
+- assertVisible:
+    id: "tvProfileHeaderName"

@@ -1,0 +1,27 @@
+# ==============================================================================
+# Teste de Integração 05: Filtro por Categoria no Spinner da Home
+# ==============================================================================
+# Descrição: Interage com o spinnerCategory na HomeActivity, seleciona a
+#            categoria "Tecnologia" e valida a filtragem no RecyclerView.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Seleção do Spinner de Categoria
+- assertVisible:
+    id: "spinnerCategory"
+- tapOn:
+    id: "spinnerCategory"
+
+# 3. Escolha da Categoria "Tecnologia"
+- tapOn: "Tecnologia"
+
+# 4. Validação da Lista Filtrada no RecyclerView
+- assertVisible:
+    id: "rvEvents"

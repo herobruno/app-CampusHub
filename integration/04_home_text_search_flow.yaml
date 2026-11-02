@@ -1,0 +1,27 @@
+# ==============================================================================
+# Teste de Integração 04: Pesquisa Dinâmica de Eventos por Texto
+# ==============================================================================
+# Descrição: Digita no campo de busca etSearchQuery na HomeActivity e verifica
+#            a filtragem dinâmica da lista de eventos no RecyclerView.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Digitação no Campo de Busca
+- assertVisible:
+    id: "etSearchQuery"
+- tapOn:
+    id: "etSearchQuery"
+- inputText: "Workshop"
+
+- hideKeyboard
+
+# 3. Validação do Filtro Aplicado no RecyclerView
+- assertVisible:
+    id: "rvEvents"

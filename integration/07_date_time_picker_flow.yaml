@@ -1,0 +1,42 @@
+# ==============================================================================
+# Teste de Integração 07: Seletor Nativo de Data e Horário
+# ==============================================================================
+# Descrição: Clica no campo etEventDate na CreateEventActivity, valida a abertura
+#            do DatePickerDialog nativo do Android e confirma a seleção.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Navegação para a Tela de Cadastro
+- tapOn:
+    id: "fabAddEvent"
+
+# 3. Abertura do Seletor de Data Nativo
+- assertVisible:
+    id: "etEventDate"
+- tapOn:
+    id: "etEventDate"
+
+# 4. Confirmação da data no modal nativo
+- runFlow:
+    when:
+      visible: "OK"
+    commands:
+      - tapOn: "OK"
+
+# 5. Confirmação do horário no modal nativo
+- runFlow:
+    when:
+      visible: "OK"
+    commands:
+      - tapOn: "OK"
+
+# 6. Validação da presença do campo formatado
+- assertVisible:
+    id: "etEventDate"

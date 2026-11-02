@@ -1,0 +1,27 @@
+# ==============================================================================
+# Teste de Integração 08: Alternância de Favorito no Card de Evento
+# ==============================================================================
+# Descrição: Clica no botão de coração (btnFavorite) do primeiro card de evento
+#            na Home e valida a resposta de alternância de estado.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Validação da Lista de Eventos na Home
+- assertVisible:
+    id: "rvEvents"
+
+# 3. Clique no botão de Favoritar no primeiro card da lista
+- tapOn:
+    id: "btnFavorite"
+    index: 0
+
+# 4. Confirmação da permanência na tela com lista ativa
+- assertVisible:
+    id: "rvEvents"

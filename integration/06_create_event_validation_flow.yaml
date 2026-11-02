@@ -1,0 +1,47 @@
+# ==============================================================================
+# Teste de Integração 06: Validação de Limite de Vagas na Criação de Evento
+# ==============================================================================
+# Descrição: Informa limite de vagas inválido (0) no formulário e confirma
+#            a trava de segurança impedindo a publicação.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Navegação para a Tela de Cadastro
+- tapOn:
+    id: "fabAddEvent"
+
+# 3. Preenchimento de Campos com Vagas Inválidas (0)
+- tapOn:
+    id: "etEventTitle"
+- inputText: "Evento Teste Validação"
+
+- tapOn:
+    id: "etEventDescription"
+- inputText: "Descrição de teste para validação de vagas."
+
+- tapOn:
+    id: "etEventLocation"
+- inputText: "Auditório B"
+
+- tapOn:
+    id: "etMaxParticipants"
+- inputText: "0"
+
+- hideKeyboard
+
+- scroll
+
+# 4. Tenta publicar o evento com limite 0
+- tapOn:
+    id: "btnSaveEvent"
+
+# 5. Valida que o aplicativo permanece no formulário mantendo o botão de publicar ativo
+- assertVisible:
+    id: "btnSaveEvent"

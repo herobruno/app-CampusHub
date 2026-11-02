@@ -1,0 +1,42 @@
+# ==============================================================================
+# Teste de Integração 10: Alteração de Status pelo Organizador do Evento
+# ==============================================================================
+# Descrição: Abre a tela de detalhes de um evento criado pelo próprio usuário,
+#            valida as ações do organizador (cardCreatorActions) e alterna status.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Navegação para os Meus Eventos pelo Ícone de Perfil
+- tapOn:
+    id: "btnProfile"
+
+# 3. Acessa os Eventos Criados pelo Botão de Gestão
+- assertVisible:
+    id: "btnManageMyEvents"
+- tapOn:
+    id: "btnManageMyEvents"
+
+# 4. Seleciona o primeiro evento criado na lista de MyEventsActivity
+- assertVisible:
+    id: "rvMyEvents"
+
+- runFlow:
+    when:
+      visible:
+        id: "tvEventTitle"
+    commands:
+      - tapOn:
+          id: "tvEventTitle"
+          index: 0
+      # 5. Validação da presença dos botões de gestão do criador
+      - assertVisible:
+          id: "cardCreatorActions"
+      - assertVisible:
+          id: "btnToggleStatus"

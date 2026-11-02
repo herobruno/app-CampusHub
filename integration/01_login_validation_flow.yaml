@@ -1,0 +1,29 @@
+# ==============================================================================
+# Teste de Integração 01: Validação de Formulário Vazio no Login
+# ==============================================================================
+# Descrição: Valida que a submissão do formulário de login sem preenchimento dos
+#            campos impede a autenticação e mantém o usuário em LoginActivity.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: true
+
+# 1. Validação dos campos da tela de Login
+- assertVisible:
+    id: "etEmail"
+- assertVisible:
+    id: "etPassword"
+- assertVisible:
+    id: "btnLogin"
+
+# 2. Tenta submeter sem preencher e-mail ou senha
+- tapOn:
+    id: "btnLogin"
+
+# 3. Confirma que o aplicativo permanece na LoginActivity
+- assertVisible:
+    id: "etEmail"
+- assertVisible:
+    id: "btnLogin"

@@ -1,0 +1,36 @@
+# ==============================================================================
+# Teste de Integração 09: Abertura e Envio de Comentários
+# ==============================================================================
+# Descrição: Clica no botão de comentários no card de evento, valida a exibição
+#            do CommentsBottomSheetFragment, digita e envia um comentário.
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+- launchApp:
+    clearState: false
+
+# 1. Autenticação via Subfluxo Reutilizável
+- runFlow: subflows/login_helper.yaml
+
+# 2. Abertura do Modal de Comentários no primeiro card
+- assertVisible:
+    id: "layoutComments"
+- tapOn:
+    id: "layoutComments"
+    index: 0
+
+# 3. Digitação do Comentário no Modal BottomSheet
+- assertVisible:
+    id: "etCommentInput"
+- tapOn:
+    id: "etCommentInput"
+- inputText: "Excelente iniciativa!"
+
+# 4. Envio do Comentário
+- tapOn:
+    id: "btnSendComment"
+
+# 5. Validação da Presença do Campo de Entrada Ativo no Modal
+- assertVisible:
+    id: "etCommentInput"

@@ -1,0 +1,53 @@
+# ==============================================================================
+# Subfluxo Reutilizável de Autenticação para Testes de Integração
+# ==============================================================================
+
+appId: br.com.uri.meuprojeto
+---
+# 1. Se a tela de Login estiver visível, efetua o Login com id do campo
+- runFlow:
+    when:
+      visible:
+        id: "etEmail"
+    commands:
+      - tapOn:
+          id: "etEmail"
+      - inputText: "${EMAIL != null ? EMAIL : 'maestro_test@uri.br'}"
+      - tapOn:
+          id: "etPassword"
+      - inputText: "${PASSWORD != null ? PASSWORD : '123456'}"
+      - hideKeyboard
+      - tapOn:
+          id: "btnLogin"
+
+# 2. Se a tela de Registro estiver visível, efetua o cadastro no Firebase
+- runFlow:
+    when:
+      visible:
+        id: "btnRegister"
+    commands:
+      - tapOn:
+          id: "etName"
+      - inputText: "Usuário Teste Maestro"
+      - tapOn:
+          id: "etEmail"
+      - inputText: "${EMAIL != null ? EMAIL : 'maestro_test@uri.br'}"
+      - tapOn:
+          id: "etPassword"
+      - inputText: "${PASSWORD != null ? PASSWORD : '123456'}"
+      - hideKeyboard
+      - tapOn:
+          id: "btnRegister"
+      - tapOn:
+          id: "etEmail"
+      - inputText: "${EMAIL != null ? EMAIL : 'maestro_test@uri.br'}"
+      - tapOn:
+          id: "etPassword"
+      - inputText: "${PASSWORD != null ? PASSWORD : '123456'}"
+      - hideKeyboard
+      - tapOn:
+          id: "btnLogin"
+
+# 3. Confirma que o usuário está autenticado na Home
+- assertVisible:
+    id: "fabAddEvent"
