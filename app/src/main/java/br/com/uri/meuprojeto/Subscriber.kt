@@ -14,5 +14,7 @@ data class Subscriber(
     val imageUrl: String = "",
     val status: String = "OPEN",
     val maxParticipants: Int = 0,
+    val checkedIn: Boolean = false,
+    val checkedInAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis()
 )

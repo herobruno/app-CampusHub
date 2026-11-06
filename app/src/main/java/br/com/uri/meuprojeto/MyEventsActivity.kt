@@ -158,6 +158,7 @@ class MyEventsActivity : AppCompatActivity() {
             userSubRef.delete()
             eventSubRef.delete().addOnSuccessListener {
                 syncSubscriberCount(eventRef)
+                promoteNextWaitlistCandidate(eventRef, event.id)
                 Toast.makeText(this, "Inscrição cancelada com sucesso!", Toast.LENGTH_SHORT).show()
             }
         } else {
@@ -223,6 +224,28 @@ class MyEventsActivity : AppCompatActivity() {
             val count = snapshot?.size() ?: 0
             eventRef.update("subscriberCount", count)
         }
+    }
+
+    private fun promoteNextWaitlistCandidate(eventRef: com.google.firebase.firestore.DocumentReference, eventId: String) {
+        eventRef.collection("waitlist")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot != null && !snapshot.isEmpty) {
+                    val candidateDoc = snapshot.documents.firstOrNull { doc ->
+                        doc.getString("status") == "WAITING"
+                    }
+                    if (candidateDoc != null) {
+                        val candidateUserId = candidateDoc.getString("userId") ?: candidateDoc.id
+                        val updates = mapOf(
+                            "status" to "OFFERED",
+                            "offeredAt" to System.currentTimeMillis()
+                        )
+                        eventRef.collection("waitlist").document(candidateUserId).update(updates)
+                        db.collection("users").document(candidateUserId).collection("waitlists").document(eventId).update(updates)
+                    }
+                }
+            }
     }
 
     private fun syncFavoriteCount(eventRef: com.google.firebase.firestore.DocumentReference) {

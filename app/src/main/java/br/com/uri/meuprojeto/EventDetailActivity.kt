@@ -56,10 +56,12 @@ class EventDetailActivity : AppCompatActivity() {
     private var audiosListener: ListenerRegistration? = null
     private var videosListener: ListenerRegistration? = null
     private var subscriberListener: ListenerRegistration? = null
+    private var waitlistListener: ListenerRegistration? = null
     private var ratingListener: ListenerRegistration? = null
     private var favoriteListener: ListenerRegistration? = null
 
     private var isCurrentUserSubscribed: Boolean = false
+    private var currentUserWaitlistStatus: String? = null
     private var isCurrentUserFavorite: Boolean = false
     private var currentUserRatingScore: Double? = null
 
@@ -82,6 +84,7 @@ class EventDetailActivity : AppCompatActivity() {
 
     // Creator Management Card
     private lateinit var cardCreatorActions: MaterialCardView
+    private lateinit var btnViewSubscribers: MaterialButton
     private lateinit var btnToggleStatus: MaterialButton
     private lateinit var btnDeleteEvent: MaterialButton
 
@@ -236,6 +239,7 @@ class EventDetailActivity : AppCompatActivity() {
         tvCommentCount = findViewById(R.id.tvCommentCount)
 
         cardCreatorActions = findViewById(R.id.cardCreatorActions)
+        btnViewSubscribers = findViewById(R.id.btnViewSubscribers)
         btnToggleStatus = findViewById(R.id.btnToggleStatus)
         btnDeleteEvent = findViewById(R.id.btnDeleteEvent)
 
@@ -396,6 +400,12 @@ class EventDetailActivity : AppCompatActivity() {
 
         btnDeleteEvent.setOnClickListener {
             currentEvent?.let { confirmDeleteEvent(it) }
+        }
+
+        btnViewSubscribers.setOnClickListener {
+            val cid = if (creatorId.isNotEmpty()) creatorId else currentEvent?.creatorId ?: ""
+            EventSubscribersBottomSheetFragment.newInstance(eventId, cid)
+                .show(supportFragmentManager, "EventSubscribersBottomSheetFragment")
         }
     }
 
@@ -974,6 +984,18 @@ class EventDetailActivity : AppCompatActivity() {
                 }
         }
 
+        if (waitlistListener == null && currentUserId.isNotEmpty()) {
+            waitlistListener = getEventRef().collection("waitlist").document(currentUserId)
+                .addSnapshotListener { snapshot, _ ->
+                    currentUserWaitlistStatus = if (snapshot != null && snapshot.exists()) {
+                        snapshot.getString("status") ?: "WAITING"
+                    } else {
+                        null
+                    }
+                    currentEvent?.let { bindEventData(it) }
+                }
+        }
+
         if (favoriteListener == null && currentUserId.isNotEmpty()) {
             favoriteListener = getEventRef().collection("favorites").document(currentUserId)
                 .addSnapshotListener { snapshot, _ ->
@@ -1008,11 +1030,17 @@ class EventDetailActivity : AppCompatActivity() {
         tvLocation.text = if (event.location.isNotEmpty()) event.location else "Endereço não informado"
         tvDescription.text = if (event.description.isNotEmpty()) event.description else "Sem descrição informada."
 
-        tvCapacity.text = "${event.subscriberCount} / ${event.maxParticipants} participantes inscritos"
+        val capacityText = if (event.waitlistCount > 0) {
+            "${event.subscriberCount} / ${event.maxParticipants} participantes inscritos (${event.waitlistCount} na lista de espera)"
+        } else {
+            "${event.subscriberCount} / ${event.maxParticipants} participantes inscritos"
+        }
+        tvCapacity.text = capacityText
         tvCommentCount.text = event.commentCount.toString()
 
         val isSubscribed = isCurrentUserSubscribed
         val isOwner = currentUserId.isNotEmpty() && currentUserId == event.creatorId
+        val isFullOrHasWaitlist = (event.maxParticipants > 0 && event.subscriberCount >= event.maxParticipants) || event.waitlistCount > 0
 
         if (event.isEnded) {
             tvStatus.text = "Encerrado"
@@ -1039,10 +1067,26 @@ class EventDetailActivity : AppCompatActivity() {
                 btnSubscribe.visibility = View.VISIBLE
                 btnSubscribe.text = "Organizador"
                 btnSubscribe.isEnabled = false
+            } else if (isSubscribed) {
+                btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.isEnabled = true
+                btnSubscribe.text = "Inscrito"
+            } else if (currentUserWaitlistStatus == "OFFERED") {
+                btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.isEnabled = true
+                btnSubscribe.text = "Confirmar Vaga"
+            } else if (currentUserWaitlistStatus == "WAITING") {
+                btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.isEnabled = true
+                btnSubscribe.text = "Na Lista de Espera"
+            } else if (isFullOrHasWaitlist) {
+                btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.isEnabled = true
+                btnSubscribe.text = "Entrar na Lista de Espera"
             } else {
                 btnSubscribe.visibility = View.VISIBLE
                 btnSubscribe.isEnabled = true
-                btnSubscribe.text = if (isSubscribed) "Inscrito" else "Inscrever-se"
+                btnSubscribe.text = "Inscrever-se"
             }
         }
 
@@ -1082,17 +1126,73 @@ class EventDetailActivity : AppCompatActivity() {
         val userSubRef = db.collection("users").document(userId).collection("subscriptions").document(event.id)
         val eventSubRef = eventRef.collection("subscribers").document(userId)
 
+        val userWaitlistRef = db.collection("users").document(userId).collection("waitlists").document(event.id)
+        val eventWaitlistRef = eventRef.collection("waitlist").document(userId)
+
         if (isCurrentUserSubscribed) {
             userSubRef.delete()
             eventSubRef.delete().addOnSuccessListener {
                 syncSubscriberCount(eventRef)
+                promoteNextWaitlistCandidate(eventRef)
                 Toast.makeText(this, "Inscrição cancelada!", Toast.LENGTH_SHORT).show()
             }
-        } else {
-            if (event.subscriberCount >= event.maxParticipants && event.maxParticipants > 0) {
-                Toast.makeText(this, "Evento com vagas esgotadas!", Toast.LENGTH_SHORT).show()
-                return
+        } else if (currentUserWaitlistStatus == "OFFERED") {
+            val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+            val subscriber = Subscriber(
+                id = userId,
+                userId = userId,
+                userName = userName,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                description = event.description,
+                date = event.date,
+                location = event.location,
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
+            )
+
+            userSubRef.set(subscriber)
+            eventSubRef.set(subscriber).addOnSuccessListener {
+                userWaitlistRef.delete()
+                eventWaitlistRef.delete().addOnSuccessListener {
+                    syncSubscriberCount(eventRef)
+                    syncWaitlistCount(eventRef)
+                    Toast.makeText(this, "Vaga confirmada! Inscrição realizada com sucesso.", Toast.LENGTH_SHORT).show()
+                }
             }
+        } else if (currentUserWaitlistStatus == "WAITING") {
+            userWaitlistRef.delete()
+            eventWaitlistRef.delete().addOnSuccessListener {
+                syncWaitlistCount(eventRef)
+                Toast.makeText(this, "Você saiu da lista de espera.", Toast.LENGTH_SHORT).show()
+            }
+        } else if ((event.subscriberCount >= event.maxParticipants && event.maxParticipants > 0) || event.waitlistCount > 0) {
+            val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+            val entry = WaitlistEntry(
+                id = userId,
+                userId = userId,
+                userName = userName,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                description = event.description,
+                date = event.date,
+                location = event.location,
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = "WAITING",
+                createdAt = System.currentTimeMillis()
+            )
+
+            userWaitlistRef.set(entry)
+            eventWaitlistRef.set(entry).addOnSuccessListener {
+                syncWaitlistCount(eventRef)
+                Toast.makeText(this, "Você entrou na lista de espera!", Toast.LENGTH_SHORT).show()
+            }
+        } else {
             val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
             val subscriber = Subscriber(
                 id = userId,
@@ -1161,6 +1261,35 @@ class EventDetailActivity : AppCompatActivity() {
             val count = snapshot?.size() ?: 0
             eventRef.update("subscriberCount", count)
         }
+    }
+
+    private fun syncWaitlistCount(eventRef: DocumentReference) {
+        eventRef.collection("waitlist").get().addOnSuccessListener { snapshot ->
+            val count = snapshot?.size() ?: 0
+            eventRef.update("waitlistCount", count)
+        }
+    }
+
+    private fun promoteNextWaitlistCandidate(eventRef: DocumentReference) {
+        eventRef.collection("waitlist")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot != null && !snapshot.isEmpty) {
+                    val candidateDoc = snapshot.documents.firstOrNull { doc ->
+                        doc.getString("status") == "WAITING"
+                    }
+                    if (candidateDoc != null) {
+                        val candidateUserId = candidateDoc.getString("userId") ?: candidateDoc.id
+                        val updates = mapOf(
+                            "status" to "OFFERED",
+                            "offeredAt" to System.currentTimeMillis()
+                        )
+                        eventRef.collection("waitlist").document(candidateUserId).update(updates)
+                        db.collection("users").document(candidateUserId).collection("waitlists").document(eventId).update(updates)
+                    }
+                }
+            }
     }
 
     private fun syncFavoriteCount(eventRef: DocumentReference) {
@@ -1245,6 +1374,7 @@ class EventDetailActivity : AppCompatActivity() {
         audiosListener?.remove()
         videosListener?.remove()
         subscriberListener?.remove()
+        waitlistListener?.remove()
         ratingListener?.remove()
         favoriteListener?.remove()
 

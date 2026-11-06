@@ -45,6 +45,9 @@ class HomeActivity : AppCompatActivity() {
     private var eventsListener: ListenerRegistration? = null
     private var userSubscriptionsListener: ListenerRegistration? = null
     private var userSubscribedEventIds: Set<String> = emptySet()
+    private var userWaitlistListener: ListenerRegistration? = null
+    private var userWaitlistEventIds: Set<String> = emptySet()
+    private var userOfferedEventIds: Set<String> = emptySet()
     private var userFavoritesListener: ListenerRegistration? = null
     private var userFavoriteEventIds: Set<String> = emptySet()
 
@@ -129,6 +132,7 @@ class HomeActivity : AppCompatActivity() {
         }
 
         loadUserSubscriptionsRealtime()
+        loadUserWaitlistRealtime()
         loadUserFavoritesRealtime()
         loadEventsRealtime()
     }
@@ -140,6 +144,29 @@ class HomeActivity : AppCompatActivity() {
                 if (snapshot != null) {
                     userSubscribedEventIds = snapshot.documents.map { it.id }.toSet()
                     adapter.updateSubscribedEvents(userSubscribedEventIds)
+                }
+            }
+    }
+
+    private fun loadUserWaitlistRealtime() {
+        val userId = auth.currentUser?.uid ?: return
+        userWaitlistListener = db.collection("users").document(userId).collection("waitlists")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val waitingSet = mutableSetOf<String>()
+                    val offeredSet = mutableSetOf<String>()
+                    for (doc in snapshot.documents) {
+                        val status = doc.getString("status") ?: "WAITING"
+                        if (status == "OFFERED") {
+                            offeredSet.add(doc.id)
+                        } else {
+                            waitingSet.add(doc.id)
+                        }
+                    }
+                    userWaitlistEventIds = waitingSet
+                    userOfferedEventIds = offeredSet
+                    adapter.updateWaitlistEvents(userWaitlistEventIds)
+                    adapter.updateOfferedEvents(userOfferedEventIds)
                 }
             }
     }
@@ -374,20 +401,78 @@ class HomeActivity : AppCompatActivity() {
         val userSubRef = db.collection("users").document(userId).collection("subscriptions").document(event.id)
         val eventSubRef = eventRef.collection("subscribers").document(userId)
 
+        val userWaitlistRef = db.collection("users").document(userId).collection("waitlists").document(event.id)
+        val eventWaitlistRef = eventRef.collection("waitlist").document(userId)
+
         val isSubscribed = userSubscribedEventIds.contains(event.id)
+        val isOffered = userOfferedEventIds.contains(event.id)
+        val isOnWaitlist = userWaitlistEventIds.contains(event.id)
+        val isFullOrHasWaitlist = (event.maxParticipants > 0 && event.subscriberCount >= event.maxParticipants) || event.waitlistCount > 0
 
         if (isSubscribed) {
             userSubRef.delete()
             eventSubRef.delete().addOnSuccessListener {
                 syncSubscriberCount(eventRef)
+                promoteNextWaitlistCandidate(eventRef)
                 Toast.makeText(this, "Inscrição cancelada com sucesso!", Toast.LENGTH_SHORT).show()
             }
-        } else {
-            if (event.subscriberCount >= event.maxParticipants && event.maxParticipants > 0) {
-                Toast.makeText(this, "Desculpe, este evento já atingiu o limite de vagas!", Toast.LENGTH_SHORT).show()
-                return
-            }
+        } else if (isOffered) {
+            val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+            val subscriber = Subscriber(
+                id = userId,
+                userId = userId,
+                userName = userName,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                description = event.description,
+                date = event.date,
+                location = event.location,
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = event.status,
+                maxParticipants = event.maxParticipants
+            )
 
+            userSubRef.set(subscriber)
+            eventSubRef.set(subscriber).addOnSuccessListener {
+                userWaitlistRef.delete()
+                eventWaitlistRef.delete().addOnSuccessListener {
+                    syncSubscriberCount(eventRef)
+                    syncWaitlistCount(eventRef)
+                    Toast.makeText(this, "Vaga confirmada! Inscrição realizada com sucesso.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else if (isOnWaitlist) {
+            userWaitlistRef.delete()
+            eventWaitlistRef.delete().addOnSuccessListener {
+                syncWaitlistCount(eventRef)
+                Toast.makeText(this, "Você saiu da lista de espera.", Toast.LENGTH_SHORT).show()
+            }
+        } else if (isFullOrHasWaitlist) {
+            val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
+            val entry = WaitlistEntry(
+                id = userId,
+                userId = userId,
+                userName = userName,
+                eventId = event.id,
+                creatorId = event.creatorId,
+                title = event.title,
+                description = event.description,
+                date = event.date,
+                location = event.location,
+                category = event.category,
+                imageUrl = event.imageUrl,
+                status = "WAITING",
+                createdAt = System.currentTimeMillis()
+            )
+
+            userWaitlistRef.set(entry)
+            eventWaitlistRef.set(entry).addOnSuccessListener {
+                syncWaitlistCount(eventRef)
+                Toast.makeText(this, "Você entrou na lista de espera!", Toast.LENGTH_SHORT).show()
+            }
+        } else {
             val userName = if (!user.displayName.isNullOrEmpty()) user.displayName!! else user.email?.substringBefore("@") ?: "Usuário"
             val subscriber = Subscriber(
                 id = userId,
@@ -460,6 +545,38 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+    private fun syncWaitlistCount(eventRef: com.google.firebase.firestore.DocumentReference) {
+        eventRef.collection("waitlist").get().addOnSuccessListener { snapshot ->
+            val count = snapshot?.size() ?: 0
+            eventRef.update("waitlistCount", count)
+        }
+    }
+
+    private fun promoteNextWaitlistCandidate(eventRef: com.google.firebase.firestore.DocumentReference) {
+        eventRef.collection("waitlist")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot != null && !snapshot.isEmpty) {
+                    val candidateDoc = snapshot.documents.firstOrNull { doc ->
+                        doc.getString("status") == "WAITING"
+                    }
+                    if (candidateDoc != null) {
+                        val candidateUserId = candidateDoc.getString("userId") ?: candidateDoc.id
+                        val eventId = candidateDoc.getString("eventId") ?: ""
+                        val updates = mapOf(
+                            "status" to "OFFERED",
+                            "offeredAt" to System.currentTimeMillis()
+                        )
+                        eventRef.collection("waitlist").document(candidateUserId).update(updates)
+                        if (eventId.isNotEmpty()) {
+                            db.collection("users").document(candidateUserId).collection("waitlists").document(eventId).update(updates)
+                        }
+                    }
+                }
+            }
+    }
+
     private fun syncFavoriteCount(eventRef: com.google.firebase.firestore.DocumentReference) {
         eventRef.collection("favorites").get().addOnSuccessListener { snapshot ->
             val count = snapshot?.size() ?: 0
@@ -476,6 +593,7 @@ class HomeActivity : AppCompatActivity() {
         super.onDestroy()
         eventsListener?.remove()
         userSubscriptionsListener?.remove()
+        userWaitlistListener?.remove()
         userFavoritesListener?.remove()
     }
 

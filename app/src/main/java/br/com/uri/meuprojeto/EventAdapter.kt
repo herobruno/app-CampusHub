@@ -1,6 +1,5 @@
 package br.com.uri.meuprojeto
 
-import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,6 +16,8 @@ class EventAdapter(
     private val currentUserId: String,
     private var subscribedEventIds: Set<String> = emptySet(),
     private var favoriteEventIds: Set<String> = emptySet(),
+    private var waitlistEventIds: Set<String> = emptySet(),
+    private var offeredEventIds: Set<String> = emptySet(),
     private val onSubscribeClick: (Event) -> Unit,
     private val onFavoriteClick: ((Event) -> Unit)? = null,
     private val onCommentsClick: ((Event) -> Unit)? = null,
@@ -39,6 +40,16 @@ class EventAdapter(
         notifyDataSetChanged()
     }
 
+    fun updateWaitlistEvents(waitlistIds: Set<String>) {
+        this.waitlistEventIds = waitlistIds
+        notifyDataSetChanged()
+    }
+
+    fun updateOfferedEvents(offeredIds: Set<String>) {
+        this.offeredEventIds = offeredIds
+        notifyDataSetChanged()
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EventViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_event, parent, false)
         return EventViewHolder(view)
@@ -46,7 +57,19 @@ class EventAdapter(
 
     override fun onBindViewHolder(holder: EventViewHolder, position: Int) {
         val event = events[position]
-        holder.bind(event, currentUserId, subscribedEventIds, favoriteEventIds, onSubscribeClick, onFavoriteClick, onCommentsClick, onRateClick, onEventClick)
+        holder.bind(
+            event,
+            currentUserId,
+            subscribedEventIds,
+            favoriteEventIds,
+            waitlistEventIds,
+            offeredEventIds,
+            onSubscribeClick,
+            onFavoriteClick,
+            onCommentsClick,
+            onRateClick,
+            onEventClick
+        )
     }
 
     override fun getItemCount(): Int = events.size
@@ -75,6 +98,8 @@ class EventAdapter(
             currentUserId: String,
             subscribedEventIds: Set<String>,
             favoriteEventIds: Set<String>,
+            waitlistEventIds: Set<String>,
+            offeredEventIds: Set<String>,
             onSubscribeClick: (Event) -> Unit,
             onFavoriteClick: ((Event) -> Unit)?,
             onCommentsClick: ((Event) -> Unit)?,
@@ -91,13 +116,21 @@ class EventAdapter(
             tvEventLocation.text = event.location
             tvEventDescription.text = event.description
 
-            tvEventCapacity.text = "${event.subscriberCount} / ${event.maxParticipants} inscritos"
+            val capacityText = if (event.waitlistCount > 0) {
+                "${event.subscriberCount} / ${event.maxParticipants} inscritos (${event.waitlistCount} na fila)"
+            } else {
+                "${event.subscriberCount} / ${event.maxParticipants} inscritos"
+            }
+            tvEventCapacity.text = capacityText
 
             val count = event.commentCount
             tvCommentCount.text = if (count == 1) "1 comentário" else "$count comentários"
 
             val isOwner = currentUserId.isNotEmpty() && currentUserId == event.creatorId
             val isSubscribed = subscribedEventIds.contains(event.id)
+            val isOffered = offeredEventIds.contains(event.id)
+            val isOnWaitlist = waitlistEventIds.contains(event.id)
+            val isFullOrHasWaitlist = (event.maxParticipants > 0 && event.subscriberCount >= event.maxParticipants) || event.waitlistCount > 0
 
             if (isOwner) {
                 btnSubscribe.text = "Organizador"
@@ -105,6 +138,18 @@ class EventAdapter(
                 btnSubscribe.visibility = View.VISIBLE
             } else if (isSubscribed) {
                 btnSubscribe.text = "Inscrito"
+                btnSubscribe.isEnabled = true
+                btnSubscribe.visibility = View.VISIBLE
+            } else if (isOffered) {
+                btnSubscribe.text = "Confirmar Vaga"
+                btnSubscribe.isEnabled = true
+                btnSubscribe.visibility = View.VISIBLE
+            } else if (isOnWaitlist) {
+                btnSubscribe.text = "Na Lista de Espera"
+                btnSubscribe.isEnabled = true
+                btnSubscribe.visibility = View.VISIBLE
+            } else if (isFullOrHasWaitlist) {
+                btnSubscribe.text = "Entrar na Lista de Espera"
                 btnSubscribe.isEnabled = true
                 btnSubscribe.visibility = View.VISIBLE
             } else {
