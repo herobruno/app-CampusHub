@@ -18,10 +18,32 @@ appId: br.com.uri.meuprojeto
     id: "etSearchQuery"
 - tapOn:
     id: "etSearchQuery"
-- inputText: "Workshop"
+- inputText: "a"
 
 - hideKeyboard
 
-# 3. Validação do Filtro Aplicado no RecyclerView
+# 3. Validação da Busca
+- runFlow:
+    when:
+      visible:
+        id: "rvEvents"
+    commands:
+      - assertVisible:
+          id: "rvEvents"
+
+- runFlow:
+    when:
+      visible:
+        id: "tvEmpty"
+    commands:
+      - assertVisible:
+          id: "tvEmpty"
+
+# 4. Limpa a Busca para Garantir Restauração da Lista
+- tapOn:
+    id: "etSearchQuery"
+- eraseText: 10
+- hideKeyboard
+
 - assertVisible:
     id: "rvEvents"

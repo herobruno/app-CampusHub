@@ -8,9 +8,11 @@ import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.button.MaterialButton
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
@@ -31,6 +33,8 @@ class EventSubscribersBottomSheetFragment : BottomSheetDialogFragment() {
     private lateinit var tvEmptySubscribers: TextView
     private lateinit var rvSubscribers: RecyclerView
     private lateinit var btnCloseSheet: ImageButton
+    private lateinit var btnToggleStatus: MaterialButton
+    private lateinit var btnDeleteEvent: MaterialButton
 
     private lateinit var adapter: EventSubscriberAdapter
     private var subscribersListener: ListenerRegistration? = null
@@ -79,6 +83,8 @@ class EventSubscribersBottomSheetFragment : BottomSheetDialogFragment() {
         tvEmptySubscribers = view.findViewById(R.id.tvEmptySubscribers)
         rvSubscribers = view.findViewById(R.id.rvSubscribers)
         btnCloseSheet = view.findViewById(R.id.btnCloseSheet)
+        btnToggleStatus = view.findViewById(R.id.btnToggleStatus)
+        btnDeleteEvent = view.findViewById(R.id.btnDeleteEvent)
 
         btnCloseSheet.setOnClickListener { dismiss() }
 
@@ -88,6 +94,13 @@ class EventSubscribersBottomSheetFragment : BottomSheetDialogFragment() {
             onToggleCheckInClick = { subscriber -> toggleCheckIn(subscriber) }
         )
         rvSubscribers.adapter = adapter
+
+        val isOwner = auth.currentUser?.uid == creatorId
+        btnToggleStatus.visibility = if (isOwner) View.VISIBLE else View.GONE
+        btnDeleteEvent.visibility = if (isOwner) View.VISIBLE else View.GONE
+
+        btnToggleStatus.setOnClickListener { toggleEventStatus() }
+        btnDeleteEvent.setOnClickListener { confirmDeleteEvent() }
 
         loadEventDetailsRealtime()
         loadSubscribersRealtime()
@@ -142,6 +155,12 @@ class EventSubscribersBottomSheetFragment : BottomSheetDialogFragment() {
         val count = event.subscriberCount
         tvOccupiedSpots.text = "$count / $max"
         tvWaitlistCount.text = "${event.waitlistCount}"
+
+        if (event.isEnded) {
+            btnToggleStatus.text = "Reabrir Evento"
+        } else {
+            btnToggleStatus.text = "Encerrar Evento"
+        }
     }
 
     private fun updateMetricsWithSubscribers(subscribers: List<Subscriber>) {
@@ -183,6 +202,62 @@ class EventSubscribersBottomSheetFragment : BottomSheetDialogFragment() {
         }.addOnFailureListener { e ->
             Toast.makeText(context, "Erro ao atualizar check-in: ${e.message}", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun toggleEventStatus() {
+        val event = currentEvent ?: return
+        val newStatus = if (event.isEnded) "OPEN" else "ENDED"
+        val statusMessage = if (newStatus == "ENDED") "Evento encerrado com sucesso!" else "Evento reaberto com sucesso!"
+
+        val eventRef = getEventRef()
+        eventRef.update("status", newStatus)
+            .addOnSuccessListener {
+                eventRef.collection("subscribers").get().addOnSuccessListener { snapshot ->
+                    snapshot?.documents?.forEach { doc ->
+                        val subUserId = doc.getString("userId") ?: doc.id
+                        db.collection("users").document(subUserId).collection("subscriptions").document(event.id).update("status", newStatus)
+                        eventRef.collection("subscribers").document(subUserId).update("status", newStatus)
+                    }
+                }
+                eventRef.collection("favorites").get().addOnSuccessListener { snapshot ->
+                    snapshot?.documents?.forEach { doc ->
+                        val favUserId = doc.getString("userId") ?: doc.id
+                        db.collection("users").document(favUserId).collection("favorites").document(event.id).update("status", newStatus)
+                        eventRef.collection("favorites").document(favUserId).update("status", newStatus)
+                    }
+                }
+                Toast.makeText(context, statusMessage, Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(context, "Erro ao alterar status: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    private fun confirmDeleteEvent() {
+        val event = currentEvent ?: return
+        AlertDialog.Builder(requireContext())
+            .setTitle("Excluir Evento")
+            .setMessage("Tem certeza de que deseja excluir o evento '${event.title}'? Esta ação não pode ser desfeita.")
+            .setPositiveButton("Excluir") { dialog, _ ->
+                deleteEvent()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancelar") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun deleteEvent() {
+        getEventRef().delete()
+            .addOnSuccessListener {
+                Toast.makeText(context, "Evento excluído com sucesso!", Toast.LENGTH_SHORT).show()
+                dismiss()
+                activity?.finish()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(context, "Erro ao excluir evento: ${e.message}", Toast.LENGTH_LONG).show()
+            }
     }
 
     override fun onDestroyView() {

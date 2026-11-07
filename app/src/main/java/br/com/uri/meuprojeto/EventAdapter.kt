@@ -133,8 +133,8 @@ class EventAdapter(
             val isFullOrHasWaitlist = (event.maxParticipants > 0 && event.subscriberCount >= event.maxParticipants) || event.waitlistCount > 0
 
             if (isOwner) {
-                btnSubscribe.text = "Organizador"
-                btnSubscribe.isEnabled = false
+                btnSubscribe.text = "Gerenciar"
+                btnSubscribe.isEnabled = true
                 btnSubscribe.visibility = View.VISIBLE
             } else if (isSubscribed) {
                 btnSubscribe.text = "Inscrito"
@@ -168,7 +168,9 @@ class EventAdapter(
                 tvRatingAverage.visibility = View.VISIBLE
 
                 if (isOwner) {
-                    btnSubscribe.visibility = View.GONE
+                    btnSubscribe.text = "Gerenciar"
+                    btnSubscribe.isEnabled = true
+                    btnSubscribe.visibility = View.VISIBLE
                     btnRateEvent.visibility = View.GONE
                 } else {
                     btnSubscribe.visibility = View.GONE
@@ -209,7 +211,7 @@ class EventAdapter(
             }
 
             btnSubscribe.setOnClickListener {
-                if (!event.isEnded && !isOwner) {
+                if (isOwner || !event.isEnded) {
                     onSubscribeClick(event)
                 }
             }

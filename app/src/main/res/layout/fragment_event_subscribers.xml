@@ -176,8 +176,45 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvSubscribers"
         android:layout_width="match_parent"
-        android:layout_height="320dp"
+        android:layout_height="260dp"
         android:clipToPadding="false"
         tools:listitem="@layout/item_event_subscriber" />
+
+    <!-- Management Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnToggleStatus"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:text="Encerrar Evento"
+            android:textColor="@color/primary_dark"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            app:cornerRadius="10dp"
+            app:strokeColor="@color/primary_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDeleteEvent"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:text="Excluir Evento"
+            android:textColor="#FFD32F2F"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            app:cornerRadius="10dp"
+            app:strokeColor="#FFD32F2F" />
+
+    </LinearLayout>
 
 </LinearLayout>

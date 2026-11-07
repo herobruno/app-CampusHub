@@ -2,7 +2,7 @@
 # Teste de Integração 10: Alteração de Status pelo Organizador do Evento
 # ==============================================================================
 # Descrição: Abre a tela de detalhes de um evento criado pelo próprio usuário,
-#            valida as ações do organizador (cardCreatorActions) e alterna status.
+#            valida as ações do organizador ("Gerenciar") e alterna status.
 # ==============================================================================
 
 appId: br.com.uri.meuprojeto
@@ -23,20 +23,51 @@ appId: br.com.uri.meuprojeto
 - tapOn:
     id: "btnManageMyEvents"
 
-# 4. Seleciona o primeiro evento criado na lista de MyEventsActivity
-- assertVisible:
-    id: "rvMyEvents"
-
+# 4. Se a lista estiver vazia, cria um novo evento
 - runFlow:
     when:
       visible:
-        id: "tvEventTitle"
+        id: "tvNoMyEvents"
     commands:
       - tapOn:
-          id: "tvEventTitle"
-          index: 0
-      # 5. Validação da presença dos botões de gestão do criador
-      - assertVisible:
-          id: "cardCreatorActions"
-      - assertVisible:
-          id: "btnToggleStatus"
+          id: "btnBack"
+      - tapOn:
+          id: "fabAddEvent"
+      - tapOn:
+          id: "etEventTitle"
+      - inputText: "Evento Gestao Teste"
+      - tapOn:
+          id: "etEventDescription"
+      - inputText: "Descricao de evento para teste de gestao pelo criador."
+      - tapOn:
+          id: "etEventLocation"
+      - inputText: "Auditorio Principal"
+      - tapOn:
+          id: "etMaxParticipants"
+      - inputText: "30"
+      - hideKeyboard
+      - scroll
+      - tapOn:
+          id: "btnSaveEvent"
+      - tapOn:
+          id: "btnProfile"
+      - tapOn:
+          id: "btnManageMyEvents"
+
+# 5. Seleciona o primeiro evento criado na lista de MyEventsActivity
+- assertVisible:
+    id: "rvMyEvents"
+
+- tapOn:
+    id: "tvEventTitle"
+    index: 0
+
+# 6. Validação do botão de gestão "Gerenciar" e do painel do criador
+- assertVisible:
+    id: "btnSubscribe"
+- tapOn:
+    id: "btnSubscribe"
+
+# 7. Validação da presença do botão de alternar status no painel
+- assertVisible:
+    id: "btnToggleStatus"

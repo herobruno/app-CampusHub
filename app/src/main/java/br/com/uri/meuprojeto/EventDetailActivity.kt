@@ -82,12 +82,6 @@ class EventDetailActivity : AppCompatActivity() {
     private lateinit var layoutComments: LinearLayout
     private lateinit var tvCommentCount: TextView
 
-    // Creator Management Card
-    private lateinit var cardCreatorActions: MaterialCardView
-    private lateinit var btnViewSubscribers: MaterialButton
-    private lateinit var btnToggleStatus: MaterialButton
-    private lateinit var btnDeleteEvent: MaterialButton
-
     // Tab Layout & Containers
     private lateinit var tabLayout: TabLayout
     private lateinit var layoutTabLocation: MaterialCardView
@@ -237,11 +231,6 @@ class EventDetailActivity : AppCompatActivity() {
         btnRate = findViewById(R.id.btnRate)
         layoutComments = findViewById(R.id.layoutComments)
         tvCommentCount = findViewById(R.id.tvCommentCount)
-
-        cardCreatorActions = findViewById(R.id.cardCreatorActions)
-        btnViewSubscribers = findViewById(R.id.btnViewSubscribers)
-        btnToggleStatus = findViewById(R.id.btnToggleStatus)
-        btnDeleteEvent = findViewById(R.id.btnDeleteEvent)
 
         tabLayout = findViewById(R.id.tabLayout)
         layoutTabLocation = findViewById(R.id.layoutTabLocation)
@@ -393,76 +382,6 @@ class EventDetailActivity : AppCompatActivity() {
         btnFavorite.setOnClickListener { currentEvent?.let { toggleFavorite(it) } }
         btnSubscribe.setOnClickListener { currentEvent?.let { toggleSubscription(it) } }
         btnRate.setOnClickListener { currentEvent?.let { showRatingDialog(it) } }
-
-        btnToggleStatus.setOnClickListener {
-            currentEvent?.let { toggleEventStatus(it) }
-        }
-
-        btnDeleteEvent.setOnClickListener {
-            currentEvent?.let { confirmDeleteEvent(it) }
-        }
-
-        btnViewSubscribers.setOnClickListener {
-            val cid = if (creatorId.isNotEmpty()) creatorId else currentEvent?.creatorId ?: ""
-            EventSubscribersBottomSheetFragment.newInstance(eventId, cid)
-                .show(supportFragmentManager, "EventSubscribersBottomSheetFragment")
-        }
-    }
-
-    private fun toggleEventStatus(event: Event) {
-        val newStatus = if (event.isEnded) "OPEN" else "ENDED"
-        val statusMessage = if (newStatus == "ENDED") "Evento encerrado com sucesso!" else "Evento reaberto com sucesso!"
-
-        val eventRef = getEventRef()
-        eventRef.update("status", newStatus)
-            .addOnSuccessListener {
-                // Sincroniza o novo status com os inscritos do evento na subcoleção do usuário e na subcoleção do evento
-                eventRef.collection("subscribers").get().addOnSuccessListener { snapshot ->
-                    snapshot?.documents?.forEach { doc ->
-                        val subUserId = doc.getString("userId") ?: doc.id
-                        db.collection("users").document(subUserId).collection("subscriptions").document(event.id).update("status", newStatus)
-                        eventRef.collection("subscribers").document(subUserId).update("status", newStatus)
-                    }
-                }
-                // Sincroniza o novo status com os favoritos do evento na subcoleção do usuário e na subcoleção do evento
-                eventRef.collection("favorites").get().addOnSuccessListener { snapshot ->
-                    snapshot?.documents?.forEach { doc ->
-                        val favUserId = doc.getString("userId") ?: doc.id
-                        db.collection("users").document(favUserId).collection("favorites").document(event.id).update("status", newStatus)
-                        eventRef.collection("favorites").document(favUserId).update("status", newStatus)
-                    }
-                }
-                Toast.makeText(this, statusMessage, Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Erro ao alterar status: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-    }
-
-    private fun confirmDeleteEvent(event: Event) {
-        AlertDialog.Builder(this)
-            .setTitle("Excluir Evento")
-            .setMessage("Tem certeza de que deseja excluir o evento '${event.title}'? Esta ação não pode ser desfeita.")
-            .setPositiveButton("Excluir") { dialog, _ ->
-                deleteEvent(event)
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancelar") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
-    }
-
-    private fun deleteEvent(event: Event) {
-        getEventRef()
-            .delete()
-            .addOnSuccessListener {
-                Toast.makeText(this, "Evento excluído com sucesso!", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Erro ao excluir evento: ${e.message}", Toast.LENGTH_LONG).show()
-            }
     }
 
     // ==================== LÓGICA DE FOTO ====================
@@ -1048,14 +967,22 @@ class EventDetailActivity : AppCompatActivity() {
             val labelReviews = if (event.ratingCount == 1) "avaliação" else "avaliações"
             tvRatingAverage.text = String.format(Locale.getDefault(), "★ %.1f (%d %s)", event.averageRating, event.ratingCount, labelReviews)
             tvRatingAverage.visibility = View.VISIBLE
-            btnSubscribe.visibility = View.GONE
 
-            if (isSubscribed && !isOwner) {
-                btnRate.visibility = View.VISIBLE
-                val userRating = currentUserRatingScore
-                btnRate.text = if (userRating != null) String.format(Locale.getDefault(), "Sua Nota: %.1f ★", userRating) else "Avaliar Evento"
-            } else {
+            if (isOwner) {
+                btnSubscribe.visibility = View.VISIBLE
+                btnSubscribe.isEnabled = true
+                btnSubscribe.text = "Gerenciar"
                 btnRate.visibility = View.GONE
+            } else {
+                btnSubscribe.visibility = View.GONE
+
+                if (isSubscribed) {
+                    btnRate.visibility = View.VISIBLE
+                    val userRating = currentUserRatingScore
+                    btnRate.text = if (userRating != null) String.format(Locale.getDefault(), "Sua Nota: %.1f ★", userRating) else "Avaliar Evento"
+                } else {
+                    btnRate.visibility = View.GONE
+                }
             }
         } else {
             tvStatus.text = "Aberto"
@@ -1065,8 +992,8 @@ class EventDetailActivity : AppCompatActivity() {
 
             if (isOwner) {
                 btnSubscribe.visibility = View.VISIBLE
-                btnSubscribe.text = "Organizador"
-                btnSubscribe.isEnabled = false
+                btnSubscribe.isEnabled = true
+                btnSubscribe.text = "Gerenciar"
             } else if (isSubscribed) {
                 btnSubscribe.visibility = View.VISIBLE
                 btnSubscribe.isEnabled = true
@@ -1090,18 +1017,6 @@ class EventDetailActivity : AppCompatActivity() {
             }
         }
 
-        // Ações do Criador (Se o usuário for o criador do evento)
-        if (isOwner) {
-            cardCreatorActions.visibility = View.VISIBLE
-            if (event.isEnded) {
-                btnToggleStatus.text = "Reabrir"
-            } else {
-                btnToggleStatus.text = "Encerrar"
-            }
-        } else {
-            cardCreatorActions.visibility = View.GONE
-        }
-
         val isFavorite = isCurrentUserFavorite
         btnFavorite.setImageResource(if (isFavorite) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline)
 
@@ -1117,7 +1032,9 @@ class EventDetailActivity : AppCompatActivity() {
         val userId = user.uid
 
         if (userId == event.creatorId) {
-            Toast.makeText(this, "Você é o organizador deste evento!", Toast.LENGTH_SHORT).show()
+            val cid = if (creatorId.isNotEmpty()) creatorId else currentEvent?.creatorId ?: ""
+            EventSubscribersBottomSheetFragment.newInstance(eventId, cid)
+                .show(supportFragmentManager, "EventSubscribersBottomSheetFragment")
             return
         }
 
