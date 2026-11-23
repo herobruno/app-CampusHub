@@ -2,6 +2,7 @@ package br.com.uri.meuprojeto
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,6 +19,23 @@ class SubscriberUnitTest {
         assertEquals("", subscriber.title)
         assertEquals("OPEN", subscriber.status)
         assertEquals(0, subscriber.maxParticipants)
+        assertFalse(subscriber.checkedIn)
+        assertNull(subscriber.checkedInAt)
+    }
+
+    @Test
+    fun `deve inicializar Subscriber com check-in realizado`() {
+        val timestamp = System.currentTimeMillis()
+        val subscriber = Subscriber(
+            id = "sub_1",
+            userId = "u_123",
+            checkedIn = true,
+            checkedInAt = timestamp
+        )
+        assertEquals("sub_1", subscriber.id)
+        assertEquals("u_123", subscriber.userId)
+        assertTrue(subscriber.checkedIn)
+        assertEquals(timestamp, subscriber.checkedInAt)
     }
 
     @Test

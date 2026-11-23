@@ -20,6 +20,8 @@ class EventUnitTest {
         assertEquals("", event.category)
         assertEquals(0, event.maxParticipants)
         assertEquals(0, event.subscriberCount)
+        assertEquals(0, event.waitlistCount)
+        assertEquals(0, event.checkedInCount)
         assertEquals(0, event.favoriteCount)
         assertEquals(0, event.commentCount)
         assertEquals("OPEN", event.status)
@@ -27,6 +29,18 @@ class EventUnitTest {
         assertEquals(0, event.ratingCount)
         assertEquals("", event.imageUrl)
         assertFalse(event.isEnded)
+    }
+
+    @Test
+    fun `deve inicializar o modelo Event com campos customizados de lista de espera e check-in`() {
+        val event = Event(
+            id = "e1",
+            waitlistCount = 3,
+            checkedInCount = 5
+        )
+        assertEquals("e1", event.id)
+        assertEquals(3, event.waitlistCount)
+        assertEquals(5, event.checkedInCount)
     }
 
     @Test
@@ -49,10 +63,17 @@ class EventUnitTest {
     }
 
     @Test
-    fun `deve permitir inscricao quando houver vagas disponiveis no evento`() {
-        val event = Event(maxParticipants = 10, subscriberCount = 5)
-        val isFull = event.subscriberCount >= event.maxParticipants && event.maxParticipants > 0
-        assertFalse(isFull)
+    fun `deve permitir inscricao quando houver vagas disponiveis e nao houver fila de espera`() {
+        val event = Event(maxParticipants = 10, subscriberCount = 5, waitlistCount = 0)
+        val isFullOrHasWaitlist = (event.maxParticipants > 0 && event.subscriberCount >= event.maxParticipants) || event.waitlistCount > 0
+        assertFalse(isFullOrHasWaitlist)
+    }
+
+    @Test
+    fun `deve bloquear inscricao direta quando houver pessoas na fila de espera mesmo com vaga`() {
+        val event = Event(maxParticipants = 10, subscriberCount = 9, waitlistCount = 1)
+        val isFullOrHasWaitlist = (event.maxParticipants > 0 && event.subscriberCount >= event.maxParticipants) || event.waitlistCount > 0
+        assertTrue(isFullOrHasWaitlist)
     }
 
     @Test
